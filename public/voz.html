@@ -4,297 +4,342 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atendimento por Voz - Paz Church Paraipaba</title>
+    <title>IA de Voz | Paz Paraipaba</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #00d2ff;
-            --secondary: #3a7bd5;
-            --bg: #0f172a;
-            --card: rgba(30, 41, 59, 0.7);
-        }
-
         body {
-            margin: 0;
-            padding: 0;
             font-family: 'Outfit', sans-serif;
-            background: radial-gradient(circle at top right, #1e293b, #0f172a);
-            color: white;
+            background: radial-gradient(circle at center, #0f172a, #020617);
             height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
             overflow: hidden;
+            color: white;
         }
 
-        .container {
-            width: 100%;
-            max-width: 500px;
-            padding: 2rem;
+        .pulse-ring {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            border: 2px solid #6366f1;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .active .pulse-ring {
+            animation: ring-pulse 2s infinite;
+        }
+
+        @keyframes ring-pulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .orb {
+            width: 180px;
+            height: 180px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            border-radius: 50%;
+            box-shadow: 0 0 50px rgba(99, 102, 241, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        .orb:hover {
+            transform: scale(1.05);
+        }
+
+        .orb.listening {
+            background: linear-gradient(135deg, #f43f5e, #ec4899);
+            animation: breathing 2s infinite ease-in-out;
+        }
+
+        .orb.thinking {
+            filter: hue-rotate(90deg);
+            animation: rotate-orb 1s infinite linear;
+        }
+
+        @keyframes breathing {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 50px rgba(244, 63, 94, 0.4);
+            }
+
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 80px rgba(236, 72, 153, 0.6);
+            }
+        }
+
+        @keyframes rotate-orb {
+            from {
+                transform: rotate(0deg) scale(1);
+            }
+
+            to {
+                transform: rotate(360deg) scale(0.95);
+            }
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 3rem;
+            padding: 3rem 2rem;
+            width: 90%;
+            max-width: 450px;
             text-align: center;
         }
 
-        .voice-card {
-            background: var(--card);
-            backdrop-filter: blur(12px);
-            border-radius: 2rem;
-            padding: 3rem 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            position: relative;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            background: #ef4444;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            box-shadow: 0 0 10px #ef4444;
-        }
-
-        .status-dot.active {
-            background: #22c55e;
-            box-shadow: 0 0 10px #22c55e;
-        }
-
-        h1 {
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.02em;
-        }
-
-        p {
-            color: #94a3b8;
-            margin-bottom: 2rem;
-        }
-
-        .visualizer {
-            height: 150px;
+        .bars-container {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 5px;
-            margin-bottom: 2rem;
+            gap: 4px;
+            height: 40px;
+            margin: 20px 0;
         }
 
         .bar {
             width: 4px;
-            height: 20px;
-            background: linear-gradient(to top, var(--secondary), var(--primary));
-            border-radius: 2px;
+            height: 10px;
+            background: #818cf8;
+            border-radius: 4px;
             transition: height 0.1s ease;
         }
 
-        .btn-start {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            border: none;
-            color: white;
-            padding: 1rem 2.5rem;
-            font-size: 1.1rem;
-            font-weight: 600;
-            border-radius: 99px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 10px 20px -5px rgba(0, 210, 255, 0.4);
-        }
-
-        .btn-start:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 30px -5px rgba(0, 210, 255, 0.6);
-        }
-
-        .btn-start:active {
-            transform: translateY(0);
-        }
-
-        .transcript {
+        .debug-panel {
+            font-size: 10px;
+            font-family: monospace;
+            opacity: 0.3;
             margin-top: 2rem;
-            font-size: 0.9rem;
-            color: #cbd5e1;
-            min-height: 3em;
-            font-style: italic;
-        }
-
-        .listening-indicator {
-            position: absolute;
-            top: 2rem;
-            right: 2rem;
-            font-size: 0.8rem;
-            display: none;
+            max-height: 50px;
+            overflow: hidden;
+            text-align: left;
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <div class="voice-card">
-            <div id="statusIndicator" class="listening-indicator">
-                <span class="status-dot active"></span> OUVINDO...
+    <div class="glass shadow-2xl">
+        <h1 class="text-3xl font-bold mb-2">Paz Voice AI</h1>
+        <p class="text-indigo-300 text-sm mb-8">Conselheiro Pastoral Paraipaba</p>
+
+        <div class="relative flex items-center justify-center mb-10" id="orbContainer">
+            <div class="pulse-ring"></div>
+            <div id="orb" class="orb" onclick="toggleAI()">
+                <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
             </div>
-
-            <h1>Paz Voice IA</h1>
-            <p id="subTitle">Conselheiro Pastoral - Paraipaba</p>
-
-            <div class="visualizer" id="visualizer">
-                <!-- Bars added by JS -->
-            </div>
-
-            <button class="btn-start" id="startBtn">Começar Conversa</button>
-
-            <div class="transcript" id="transcript">Clique no botão para falar...</div>
         </div>
+
+        <div id="status" class="text-xl font-medium min-h-[1.5em] mb-2">Toque para ouvir</div>
+        <div id="transcript" class="text-gray-400 text-sm italic min-h-[3em]">Clique no ícone e diga algo...</div>
+
+        <div class="bars-container" id="visualizer">
+            <!-- 10 bars -->
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+
+        <div class="debug-panel" id="debug">System ready...</div>
     </div>
 
     <script>
-        const startBtn = document.getElementById('startBtn');
-        const transcriptDiv = document.getElementById('transcript');
-        const statusIndicator = document.getElementById('statusIndicator');
-        const visualizer = document.getElementById('visualizer');
-        const subTitle = document.getElementById('subTitle');
-
-        // Create visualizer bars
-        for (let i = 0; i < 20; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'bar';
-            visualizer.appendChild(bar);
-        }
+        const orb = document.getElementById('orb');
+        const orbContainer = document.getElementById('orbContainer');
+        const statusText = document.getElementById('status');
+        const transText = document.getElementById('transcript');
+        const debugText = document.getElementById('debug');
         const bars = document.querySelectorAll('.bar');
 
-        let recognition;
         let isActive = false;
-        let isBotSpeaking = false;
+        let isSpeaking = false;
+        let recognition;
+        let synth = window.speechSynthesis;
+        const cid = new URLSearchParams(window.location.search).get('cid') || 'user';
 
-        const synth = window.speechSynthesis;
-        const cid = new URLSearchParams(window.location.search).get('cid') || 'web-user';
+        function log(msg) {
+            console.log(msg);
+            debugText.innerText = msg;
+        }
 
+        // Init Speech Recognition
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
+            recognition.continuous = false; // Only one phrase at a time per turn
+            recognition.interimResults = false; // Easier logic
             recognition.lang = 'pt-BR';
 
             recognition.onstart = () => {
-                isActive = true;
-                statusIndicator.style.display = 'block';
-                startBtn.style.display = 'none';
-                subTitle.innerText = 'Pode falar, estou te ouvindo...';
+                log("Reconhecimento iniciado...");
+                orb.classList.add('listening');
+                orbContainer.classList.add('active');
+                statusText.innerText = "IA Ouvindo...";
+                transText.innerText = "Diga sua dúvida ou pedido de oração";
             };
 
-            recognition.onresult = (event) => {
-                if (isBotSpeaking) return;
+            recognition.onerror = (e) => {
+                log("Erro: " + e.error);
+                stopAll();
+                if (e.error === 'not-allowed') alert("Permita o microfone para conversar!");
+            };
 
-                let interimTranscript = '';
-                let finalTranscript = '';
+            recognition.onresult = async (event) => {
+                const text = event.results[0][0].transcript;
+                log("Capturado: " + text);
+                transText.innerText = `"${text}"`;
+                processVoice(text);
+            };
 
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
+            recognition.onend = () => {
+                log("Reconhecimento finalizado");
+                if (isActive && !isSpeaking) {
+                    orb.classList.remove('listening');
+                    orbContainer.classList.remove('active');
+                    // We don't restart here, we let the processVoice decide
                 }
-
-                transcriptDiv.innerText = finalTranscript || interimTranscript;
-
-                if (finalTranscript) {
-                    processInput(finalTranscript);
-                }
             };
-
-            recognition.onerror = (event) => {
-                console.error(event.error);
-                isActive = false;
-                statusIndicator.style.display = 'none';
-                startBtn.style.display = 'inline-block';
-            };
+        } else {
+            alert("Navegador não suportado. Use Chrome ou Edge.");
         }
 
-        async function processInput(text) {
-            if (!text.trim()) return;
+        async function toggleAI() {
+            if (!isActive) {
+                isActive = true;
+                startListening();
+            } else {
+                stopAll();
+            }
+        }
 
-            recognition.stop(); // Stop listening while bot responds
-            subTitle.innerText = 'Pensando...';
+        function startListening() {
+            if (isSpeaking) synth.cancel();
+            isSpeaking = false;
+            try {
+                recognition.start();
+            } catch (e) {
+                log("Erro start: " + e.message);
+            }
+        }
+
+        function stopAll() {
+            isActive = false;
+            isSpeaking = false;
+            recognition.stop();
+            synth.cancel();
+            orb.className = 'orb';
+            orbContainer.classList.remove('active');
+            statusText.innerText = "Toque para ouvir";
+            transText.innerText = "Interação resetada.";
+            bars.forEach(b => b.style.height = '10px');
+            log("Processo parado.");
+        }
+
+        async function processVoice(text) {
+            orb.className = 'orb thinking';
+            statusText.innerText = "Pensando...";
 
             try {
                 const response = await fetch('/api/voice-chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, cid: cid })
+                    body: JSON.stringify({ text, cid })
                 });
+
+                if (!response.ok) throw new Error("Erro servidor: " + response.status);
+
                 const data = await response.json();
+                log("Resposta recebida do servidor");
                 speak(data.response);
-            } catch (e) {
-                speak("Tive um pequeno problema de conexão, pode repetir?");
+            } catch (err) {
+                log("Erro no processamento: " + err.message);
+                speak("Desculpe, tive um problema de conexão. Pode repetir?");
             }
         }
 
         function speak(text) {
-            isBotSpeaking = true;
-            subTitle.innerText = 'IA Falando...';
-            transcriptDiv.innerText = text;
+            isSpeaking = true;
+            orb.className = 'orb'; // Clear other modes
+            statusText.innerText = "IA Falando...";
+            transText.innerText = text;
 
-            // Remove visualizer animation for mic, add for voice
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'pt-BR';
+            utterance.rate = 1;
 
-            // Try to find a nice male voice for "Pastor" feel
+            // Voice selection logic
             const voices = synth.getVoices();
-            const preferredVoice = voices.find(v => v.name.includes('Google português do Brasil')) || voices.find(v => v.lang === 'pt-BR');
-            if (preferredVoice) utterance.voice = preferredVoice;
+            const ptVoice = voices.find(v => v.lang === 'pt-BR' && v.name.includes('Google')) || voices.find(v => v.lang === 'pt-BR');
+            if (ptVoice) utterance.voice = ptVoice;
 
-            utterance.onend = () => {
-                isBotSpeaking = false;
-                subTitle.innerText = 'Pode falar, estou ouvindo...';
-                recognition.start(); // Resume listening
+            utterance.onstart = () => {
+                log("Iniciou fala");
+                animateBars();
             };
 
+            utterance.onend = () => {
+                log("Terminou fala");
+                isSpeaking = false;
+                if (isActive) {
+                    // Espera um pouco e volta a ouvir automaticamente para um fluxo fluído
+                    setTimeout(() => {
+                        if (isActive && !isSpeaking) startListening();
+                    }, 500);
+                }
+            };
+
+            utterance.onerror = (e) => log("Synthesis error: " + e.error);
+
             synth.speak(utterance);
-            animateBarsSpeaking();
         }
 
-        function animateBarsListening(stream) {
-            if (!isActive || isBotSpeaking) return;
-            const audioContext = new AudioContext();
-            const analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
-            analyser.fftSize = 64;
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            function update() {
-                if (!isActive || isBotSpeaking) return;
-                analyser.getByteFrequencyData(dataArray);
-                bars.forEach((bar, i) => {
-                    const val = dataArray[i] / 2;
-                    bar.style.height = `${Math.max(10, val)}px`;
-                });
-                requestAnimationFrame(update);
+        function animateBars() {
+            if (!isSpeaking) {
+                bars.forEach(b => b.style.height = '10px');
+                return;
             }
-            update();
-        }
-
-        function animateBarsSpeaking() {
-            if (!isBotSpeaking) return;
-            bars.forEach((bar, i) => {
-                const random = Math.random() * 80 + 20;
-                bar.style.height = `${random}px`;
+            bars.forEach(bar => {
+                const height = Math.random() * 30 + 5;
+                bar.style.height = `${height}px`;
             });
-            if (isBotSpeaking) setTimeout(animateBarsSpeaking, 100);
-            else bars.forEach(bar => bar.style.height = '10px');
+            setTimeout(animateBars, 100);
         }
 
-        startBtn.onclick = () => {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    recognition.start();
-                    animateBarsListening(stream);
-                })
-                .catch(err => {
-                    alert("Por favor, permita o acesso ao microfone.");
-                });
-        };
+        // Pre-load voices
+        synth.getVoices();
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = () => synth.getVoices();
+        }
     </script>
 </body>
 
