@@ -5,6 +5,7 @@ import { getAIResponse } from './ai';
 
 // Configuração do ID do grupo da igreja via .env ou Hardcoded (Correção solicitada)
 const CHURCH_GROUP_ID = process.env.WHATSAPP_GROUP_ID || '120363134268223078@g.us';
+
 // Número do Pastor ou Líder Principal para notificações
 const LEADER_PHONE = process.env.LEADER_PHONE || '';
 
@@ -43,33 +44,40 @@ export function initScheduler() {
         // 1. Mandar DM privada para CADA UM
         for (const member of birthdays) {
             if (member.phone) {
-                const msg = `Olá *${member.name}*, a paz! 🕊️\n\nFeliz aniversário! 🎉🎂\nQue Deus continue te abençoando ricamente neste novo ciclo. Nós da Paz Church amamos você! ❤️`;
-
-                // Lógica de JID inteligente (igual ao whatsapp.ts)
                 let jid = member.phone;
                 if (!jid.includes('@')) {
-                    if (jid.length >= 14) {
-                        jid = `${jid}@lid`;
-                    } else {
-                        jid = `${jid}@s.whatsapp.net`;
-                    }
+                    jid = jid.length >= 14 ? `${jid}@lid` : `${jid}@s.whatsapp.net`;
                 }
 
-                await waService.sendMessage(jid, msg);
+                try {
+                    const prompt = `Gere uma mensagem curta e carinhosa de feliz aniversário de 1 parágrafo para o membro "${member.name}" da Paz Church Paraipaba. Use um tom pastoral e amigável. Cite um versículo de benção.`;
+                    const aiMsg = await getAIResponse(prompt, member.phone);
+                    const msg = aiMsg && !aiMsg.includes("Desculpe") ? aiMsg : `Olá *${member.name}*! Feliz aniversário! 🎉 Que Deus te abençoe ricamente hoje e sempre. Amamos sua vida! ❤️`;
+
+                    await waService.sendMessage(jid, msg);
+                } catch (e) {
+                    const fallback = `Olá *${member.name}*, a paz! 🕊️\n\nDesejamos um Feliz Aniversário! 🎉🎂 Que o Senhor te abençoe ricamente hoje!`;
+                    await waService.sendMessage(jid, fallback);
+                }
             }
         }
 
         // 2. Mandar no Grupo uma Imagem Real Personalizada
         if (CHURCH_GROUP_ID) {
             for (const member of birthdays) {
-                // Montar o texto do post
-                const groupMsg = `🎉 *HOJE É DIA DE FESTA!* 🎉\n\nVamos celebrar a maravilhosa vida do(a) nosso(a) amado(a) *${member.name}*! 🎂🎈\n\nDesejamos que o Senhor derrame chuvas de bênçãos sobre a sua vida, lhe concedendo paz, saúde, alegria e muitos anos de vida na presença dEle!\n\n*"O Senhor te abençoe e te guarde; o Senhor faça resplandecer o seu rosto sobre ti e te conceda paz."* (Números 6:24-26)\n\nDeixem seus parabéns aqui! 👏👏🎈`;
+                try {
+                    const prompt = `Gere uma legenda festiva e alegre para um post de aniversário no grupo da igreja para o membro "${member.name}". Use emojis e termine convidando todos a darem parabéns.`;
+                    const aiGroupMsg = await getAIResponse(prompt, CHURCH_GROUP_ID);
+                    const groupMsg = aiGroupMsg && !aiGroupMsg.includes("Desculpe") ? aiGroupMsg : `🎉 *HOJE É DIA DE FESTA!* 🎉\n\nVamos celebrar a maravilhosa vida do(a) nosso(a) amado(a) *${member.name}*! 🎂🎈 Deixem seus parabéns aqui! 👏👏🎈`;
 
-                // Montar url da imagem (usando prompt em inglês customizado)
-                const promptImg = `A beautiful 3D birthday celebration card, Christian theme, bright and joyful, luxurious balloons and cake, elegant typography with the text "Feliz Aniversário ${member.name}", high quality, 8k`;
+                    // Montar url da imagem (usando prompt em inglês customizado)
+                    const promptImg = `A beautiful 3D birthday celebration card, Christian theme, bright and joyful, luxurious balloons and cake, elegant typography with the text "Feliz Aniversário ${member.name}", high quality, 8k`;
 
-                // Enviar a imagem com a legenda (via método do whatsapp.ts)
-                await waService.sendGeneratedImageMessage(CHURCH_GROUP_ID, promptImg, groupMsg);
+                    // Enviar a imagem com a legenda (via método do whatsapp.ts)
+                    await waService.sendGeneratedImageMessage(CHURCH_GROUP_ID, promptImg, groupMsg);
+                } catch (e) {
+                    console.error("Erro ao enviar aniversário no grupo:", e);
+                }
             }
         }
     }, { timezone: "America/Sao_Paulo" });
@@ -80,17 +88,35 @@ export function initScheduler() {
 
         console.log('📖 Enviando devocional diário...');
 
+        const themes = [
+            "Graça e Misericórdia", "Fé em tempos difíceis", "O poder da oração",
+            "Amor ao próximo", "Gratidão", "Sabedoria de Provérbios",
+            "A alegria do Senhor", "Caminhando com o Espírito Santo",
+            "Vencendo o medo", "Propósito de vida em Cristo"
+        ];
+        const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+        const todayStr = new Date().toLocaleDateString('pt-BR');
+
         // Tentar gerar via IA ou usar lista pré-definida
         try {
-            const prompt = "Gere um devocional cristão curto (1 parágrafo) com um versículo chave e uma oração. Termine com 'Paz Church Paraipaba'.";
-            const devocional = await getAIResponse(prompt, 'system_scheduler');
+            // Prompt para a IA gerar um devocional curto
+            const prompt = `Gere um devocional cristão INÉDITO para hoje (${todayStr}) sobre o tema "${randomTheme}". 
+            Instruções:
+            1. Um título inspirador.
+            2. Um versículo bíblico chave (capítulo e versículo).
+            3. Uma reflexão prática de 2 a 3 parágrafos curtos.
+            4. Uma oração final.
+            5. Use poucos emojis, mantenha um tom de conselheiro maduro.
+            Não repita textos anteriores.`;
 
-            if (devocional && !devocional.includes("Desculpe")) {
-                const msg = `☀️ *BOM DIA FAMÍLIA PAZ!* ☀️\n\n${devocional}\n\nTenham um dia transbordante! 🙏`;
+            const devocional = await getAIResponse(prompt, CHURCH_GROUP_ID);
+
+            if (devocional && !devocional.includes("Desculpe") && !devocional.includes("problema técnico")) {
+                const msg = `☀️ *BOM DIA FAMÍLIA PAZ!* ☀️\n_Devocional ${todayStr}_\n\n${devocional}\n\nTenha um dia vitorioso em nome de Jesus! 🙏🔥`;
                 await waService.sendMessage(CHURCH_GROUP_ID, msg);
             } else {
-                // Fallback se a IA falhar
-                const fallbackMsg = `☀️ *Bom dia Família!* ☀️\n\n"Este é o dia que fez o Senhor; regozijemo-nos e alegremo-nos nele." - Salmos 118:24 📖\n\nQue seu dia seja cheio da presença de Deus! 🙏`;
+                // Fallback mais variado baseado no tema
+                const fallbackMsg = `☀️ *Bom dia Família!* ☀️\n\nHoje nossa reflexão é sobre *${randomTheme}*.\n\n"O Senhor é bom, um refúgio em tempos de angústia. Ele cuida dos que nele confiam." - Naum 1:7 📖\n\nQue sua manhã seja repleta da presença de Deus! 🙏`;
                 await waService.sendMessage(CHURCH_GROUP_ID, fallbackMsg);
             }
         } catch (e) {
@@ -98,18 +124,44 @@ export function initScheduler() {
         }
     }, { timezone: "America/Sao_Paulo" });
 
-    // TADEL - Terça às 18:00
-    cron.schedule('0 18 * * 2', async () => {
-        if (CHURCH_GROUP_ID) waService.sendMessage(CHURCH_GROUP_ID, `🚨 *TADEL HOJE!* 🚨\n\nÉ dia de treinamento e crescimento espiritual! 🔥\n\n⏰ 19h30\n📍 Rua Antônio Henrique, 363, Centro\n\nEsperamos todos os líderes e vocacionados! 📖`);
+    // Tarefa 4: Lembrete de TADEL (Terça às 18:30)
+    cron.schedule('30 18 * * 2', async () => {
+        if (!CHURCH_GROUP_ID) return;
+        const msg = `🚨 *Lembrete: Hoje tem TADEL!* 🚨\n\nLíderes, nosso Treinamento Avançado começa às 19h30! 📖🔥\n\n📍 Paz Church Paraipaba\nEsperamos vocês!`;
+        await waService.sendMessage(CHURCH_GROUP_ID, msg);
     }, { timezone: "America/Sao_Paulo" });
 
-    // Culto de Sexta - Sexta às 18:00
-    cron.schedule('0 18 * * 5', async () => {
-        if (CHURCH_GROUP_ID) waService.sendMessage(CHURCH_GROUP_ID, `🔥 *CULTO DE SEXTA!* 🔥\n\nVenha buscar a face do Senhor conosco hoje!\n\n⏰ 19h30\n📍 Rua Antônio Henrique, 363, Centro\n\nTraga um convidado! 🙌`);
+    // Tarefa 5: Lembrete de Culto de Sexta (Sexta às 18:30)
+    cron.schedule('30 18 * * 5', async () => {
+        if (!CHURCH_GROUP_ID) return;
+        const msg = `🚨 *Lembrete de Culto!* 🚨\n\nHoje é sexta-feira, dia de buscar ao Senhor! 🔥\nCulto às 19h30.\n\n📍 Paz Church Paraipaba\nTraga um convidado! 🙏`;
+        await waService.sendMessage(CHURCH_GROUP_ID, msg);
     }, { timezone: "America/Sao_Paulo" });
 
-    // Culto de Domingo - Domingo às 16:00
-    cron.schedule('0 16 * * 0', async () => {
-        if (CHURCH_GROUP_ID) waService.sendMessage(CHURCH_GROUP_ID, `💒 *DOMINGO É DIA DE CELEBRAÇÃO!* 💒\n\nNosso culto principal está chegando!\n\n⏰ 17h30\n📍 Rua Antônio Henrique, 363, Centro (Ao lado do Estádio)\n\nVenha em família! ❤️`);
+    // Tarefa 6: Lembrete de Cultos de Domingo (Domingo às 08:00)
+    cron.schedule('0 8 * * 0', async () => {
+        if (!CHURCH_GROUP_ID) return;
+        const msg = `🚨 *Bom dia! Hoje é dia de Culto!* 🚨\n\nVenha celebrar conosco na Casa do Pai! 🔥\nNão perca, traga sua família e convide amigos.\n\n📍 Paz Church Paraipaba\n⏰ Horários: 09h30 e 17h30\n\nEsperamos você! 🙏`;
+        await waService.sendMessage(CHURCH_GROUP_ID, msg);
     }, { timezone: "America/Sao_Paulo" });
+
+    // ---------------------------------------------------------------
+    // KEEP-ALIVE: pinga o próprio servidor a cada 10 minutos
+    // Impede hibernação no Render free tier (dorme após 15 min idle)
+    // Configure SELF_URL=https://seu-app.onrender.com no .env / painel
+    // ---------------------------------------------------------------
+    const SELF_URL = process.env.SELF_URL;
+    if (SELF_URL) {
+        console.log(`💓 Keep-alive ativado → pingando ${SELF_URL} a cada 10 min`);
+        cron.schedule('*/10 * * * *', async () => {
+            try {
+                const res = await fetch(`${SELF_URL.replace(/\/$/, '')}/`);
+                console.log(`💓 Keep-alive OK (status ${res.status})`);
+            } catch (e: any) {
+                console.warn(`💔 Keep-alive falhou: ${e.message}`);
+            }
+        });
+    } else {
+        console.log('ℹ️ SELF_URL não configurado — keep-alive desativado');
+    }
 }

@@ -47,7 +47,14 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Rota de Health Check
-app.get('/', (req, res) => res.send('Agente Igreja Paz Paraipaba está vivo! 🚀'));
+app.get('/', (req, res) => res.send('Agente Igreja - Paz Church Paraipaba está vivo! 🚀'));
+
+// Rota de Reconexão Manual (Admin)
+app.post('/api/reconnect', authMiddleware, async (req: Request, res: Response) => {
+    console.log('🔄 Reconexão manual solicitada via API...');
+    await waService.connectToWhatsApp();
+    res.json({ success: true, message: 'Tentativa de reconexão iniciada.' });
+});
 
 // --- API Endpoints ---
 
@@ -88,6 +95,7 @@ app.get('/api/dashboard-stats', async (req: Request, res: Response) => {
     try {
         const { count: totalMembers } = await supabase.from('members_paraipaba').select('*', { count: 'exact', head: true });
 
+        // Simulação de "Novos Hoje" (precisaria de campo created_at, se não existir, retorno 0)
         // Agregação por Life Group
         const { data: members } = await supabase.from('members_paraipaba').select('life_group');
 
@@ -258,6 +266,22 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
     }
 });
 
+// Rota de Chat de Voz (Interação via Navegador)
+app.post('/api/voice-chat', async (req, res) => {
+    const { message, text, cid } = req.body;
+    const input = message || text;
+    if (!input) return res.status(400).json({ error: 'Mensagem obrigatória' });
+    try {
+        const { getAIResponse } = await import('./services/ai');
+        const jid = cid ? `${cid}@s.whatsapp.net` : 'web-user';
+        const aiResponse = await getAIResponse(input, jid);
+        res.json({ response: aiResponse });
+    } catch (error) {
+        console.error('Erro no voice-chat:', error);
+        res.status(500).json({ error: 'Erro ao processar voz' });
+    }
+});
+
 // Enviar mensagem individual (usado pelo broadcast do front)
 app.post('/api/send-message', async (req, res) => {
     const { phone, message, imageUrl } = req.body;
@@ -274,22 +298,12 @@ app.post('/api/send-message', async (req, res) => {
     }
 });
 
-// Atendimento por Voz (Real-time AI Chat)
-import { getAIResponse } from './services/ai';
-app.post('/api/voice-chat', async (req: Request, res: Response) => {
-    const { text, cid } = req.body;
-    if (!text) return res.status(400).json({ error: 'Texto obrigatório' });
-    try {
-        const response = await getAIResponse(text, `voice-chat-${cid || 'anon'}`);
-        res.json({ response });
-    } catch (e) {
-        res.status(500).json({ error: 'Erro IA' });
-    }
-});
-
-// Rota Admin - Proteção básica poderia ser aqui também
 app.get('/admin', (req, res) => {
     res.sendFile('admin.html', { root: 'public' });
+});
+
+app.get('/voz', (req, res) => {
+    res.sendFile('voz.html', { root: 'public' });
 });
 
 // Correção 10: Variável currentQR removida (código morto)

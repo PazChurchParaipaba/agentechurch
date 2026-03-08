@@ -3,7 +3,7 @@ import Groq from "groq-sdk";
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const apiKey = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY; // Fallback para testar se user colocar no campo errado
+const apiKey = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
     console.warn('⚠️ Chave da API Groq não encontrada (GROQ_API_KEY). O bot não responderá com IA.');
@@ -33,7 +33,7 @@ INFORMAÇÕES DA PAZ CHURCH PARAIPABA (Incorporate isso na sua sabedoria):
 - Life Group (Célula): É o coração da igreja! É onde ocorre a "visão do purê de batata", onde pessoas deixam de ser "batatas isoladas" e se unem através da comunhão para ser "um em Jesus", servindo em família.
 - Generosidade: somos abençoados para abençoar.
 - Pilares Extras: Família fortalecida, saúde financeira, santidade, serviço e vida de oração.
-- Localização: Paraipaba - CE. Endereço: Rua Antônio Henrique, 363, Centro.
+- Cidade: Paraipaba - CE.
 
 REGRAS DE COMPORTAMENTO (Siga rigorosamente):
 1. Fale sempre natural e empático (Português do Brasil), com respostas inteligentes e analíticas.
@@ -54,7 +54,7 @@ REGRAS DE COMPORTAMENTO (Siga rigorosamente):
 10. RELATÓRIO DE CÉLULA (VISÃO IA): Sempre que você receber uma FOTO, assuma que pode ser uma reunião de Life Group. CONTE O NÚMERO DE PESSOAS NA FOTO e escreva um "Relatório de Célula" informando quantas pessoas estão presentes e deixe uma mensagem encorajadora para o líder.
 
 --- NOVAS REGRAS DE GERAÇÃO ---
-11. ATENDIMENTO POR VOZ: Se o usuário mencionar que deseja falar por telefone, informe que a Paz Church Paraipaba agora possui uma IA de voz capaz de atender ligações e conversar em tempo real para aconselhamento e dúvidas rápidas.
+11. ATENDIMENTO POR VOZ: Se o usuário mencionar que deseja falar por telefone, informe que a Paz Church Paraipaba agora possui uma IA de voz (via Vapi) capaz de atender ligações e conversar em tempo real para aconselhamento e dúvidas rápidas.
 12. DINÂMICAS DE CÉLULA: Se solicitado um quebra-gelo (f93), gere uma atividade prática, rápida e divertida pautada na palavra.
 13. SOS LUTO: Se detectar luto, mude imediatamente para o modo de máxima empatia, ofereça silêncio respeitoso se necessário e envie uma promessa bíblica de consolo.
 14. REEMBOLSOS (f97): Se receber foto de nota fiscal, extraia o valor e o item e confirme que o financeiro foi notificado.
@@ -89,8 +89,8 @@ export async function getAIResponse(userMessage: string, remoteJid: string, imag
 
         let models: string[] = [];
         if (imageBase64) {
-            console.log("📸 Processando imagem com IA Vision...");
-            models = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"];
+            console.log("📸 Processando imagem com IA Vision (Llama 4 Scout)...");
+            models = ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-11b-vision-preview"]; // Fallback para o anterior caso o scout mude
         } else {
             models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama3-70b-8192"];
         }
