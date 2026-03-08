@@ -280,9 +280,25 @@ export class WhatsAppService {
                     }
 
                     const { data: member } = await supabase.from('members_paraipaba').select('id, name').or(`phone.eq.${phone},phone.eq.55${phone}`).maybeSingle();
+
+                    // Se for um novo membro OU se for uma palavra-chave de QR Code (ex: "quero me cadastrar", "visita", "culto")
+                    const isNewMemberAction = lowerText.includes('cadastrar') || lowerText.includes('visita') || lowerText.includes('culto') || lowerText.includes('paz paraipaba');
+
                     if (!member) {
-                        await this.sendMessage(remoteJid, "Olá! Que alegria ter você aqui na Paz Church Paraipaba! 🕊️\n\nVamos fazer seu cadastro rapidinho? Qual seu nome completo?");
-                        this.userStates[remoteJid] = { type: 'REGISTRATION', step: 'WAITING_NAME', data: {}, lastInteraction: Date.now(), notifiedInactivity: false };
+                        const welcomeMsg = `Olá! Que alegria ter você conosco aqui na *Paz Church Paraipaba*! 🕊️✨\n\nSeja muito bem-vindo(a)! Ficamos felizes em te receber no nosso culto. Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?\n\nPara começar, qual seu *nome completo*?`;
+
+                        await this.sendMessage(remoteJid, welcomeMsg);
+                        this.userStates[remoteJid] = {
+                            type: 'REGISTRATION',
+                            step: 'WAITING_NAME',
+                            data: {},
+                            lastInteraction: Date.now(),
+                            notifiedInactivity: false
+                        };
+                        return;
+                    } else if (isNewMemberAction) {
+                        // Se já é membro mas mandou a palavra do QR Code, apenas saúda
+                        await this.sendMessage(remoteJid, `Olá, *${member.name}*! Que bom te ver por aqui novamente no nosso culto! 🙏✨ Como posso te ajudar hoje?`);
                         return;
                     }
                 }
