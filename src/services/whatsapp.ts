@@ -308,7 +308,7 @@ export class WhatsAppService {
                     await this.sendMessage(remoteJid, "Como posso te ajudar hoje?\n\n1️⃣ Horários e Endereço\n2️⃣ Quero doar (Pix)\n3️⃣ Onde tem uma Life?\n4️⃣ Conversar com a IA\n5️⃣ Falar com a Liderança\n\n!oração [pedido] - Pedir oração\n!quiz - Quiz Bíblico");
                     return;
                 }
-                if (lowerText === '1') { await this.sendMessage(remoteJid, "📍 Paraipaba - CE.\n⏰ Terça 19h30 | Sexta 19h30 | Dom 09h30 e 17h30."); return; }
+                if (lowerText === '1') { await this.sendMessage(remoteJid, "📍 Paz Church Paraipaba - CE.\n⏰ Horário de Culto: Domingo às 17h30."); return; }
                 if (lowerText === '2') { await this.sendMessage(remoteJid, "🙏 Sua generosidade ajuda o Reino. Chave Pix: (confirme com a secretaria)."); return; }
                 if (lowerText === '3') { await this.sendMessage(remoteJid, "Mande sua localização clicando no clipe 📎 e encontrarei a Life mais próxima! 📍"); return; }
                 if (lowerText === '5') { await this.sendMessage(remoteJid, "Transferindo para a liderança... 🙏"); if (this.LEADER_PHONE) this.sendMessage(this.LEADER_PHONE + '@s.whatsapp.net', `Atendimento humano solicitado por ${phone}`); return; }

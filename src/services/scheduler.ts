@@ -124,24 +124,10 @@ export function initScheduler() {
         }
     }, { timezone: "America/Sao_Paulo" });
 
-    // Tarefa 4: Lembrete de TADEL (Terça às 18:30)
-    cron.schedule('30 18 * * 2', async () => {
+    // Tarefa 6: Lembrete de Culto de Domingo (Domingo às 09:00)
+    cron.schedule('0 9 * * 0', async () => {
         if (!CHURCH_GROUP_ID) return;
-        const msg = `🚨 *Lembrete: Hoje tem TADEL!* 🚨\n\nLíderes, nosso Treinamento Avançado começa às 19h30! 📖🔥\n\n📍 Paz Church Paraipaba\nEsperamos vocês!`;
-        await waService.sendMessage(CHURCH_GROUP_ID, msg);
-    }, { timezone: "America/Sao_Paulo" });
-
-    // Tarefa 5: Lembrete de Culto de Sexta (Sexta às 18:30)
-    cron.schedule('30 18 * * 5', async () => {
-        if (!CHURCH_GROUP_ID) return;
-        const msg = `🚨 *Lembrete de Culto!* 🚨\n\nHoje é sexta-feira, dia de buscar ao Senhor! 🔥\nCulto às 19h30.\n\n📍 Paz Church Paraipaba\nTraga um convidado! 🙏`;
-        await waService.sendMessage(CHURCH_GROUP_ID, msg);
-    }, { timezone: "America/Sao_Paulo" });
-
-    // Tarefa 6: Lembrete de Cultos de Domingo (Domingo às 08:00)
-    cron.schedule('0 8 * * 0', async () => {
-        if (!CHURCH_GROUP_ID) return;
-        const msg = `🚨 *Bom dia! Hoje é dia de Culto!* 🚨\n\nVenha celebrar conosco na Casa do Pai! 🔥\nNão perca, traga sua família e convide amigos.\n\n📍 Paz Church Paraipaba\n⏰ Horários: 09h30 e 17h30\n\nEsperamos você! 🙏`;
+        const msg = `🚨 *Bom dia Família Paz! Hoje é dia de Celebração!* 🚨\n\nVenha buscar ao Senhor conosco na Casa do Pai! 🔥\n\n📍 Paz Church Paraipaba\n⏰ Horário: 17h30\n\nPrepare seu coração, traga sua família e convide um amigo! 🙏✨`;
         await waService.sendMessage(CHURCH_GROUP_ID, msg);
     }, { timezone: "America/Sao_Paulo" });
 
