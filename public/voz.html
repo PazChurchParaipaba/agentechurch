@@ -287,39 +287,59 @@
             }
         }
 
-        function speak(text) {
+        async function speak(text) {
             isSpeaking = true;
             orb.className = 'orb'; // Clear other modes
             statusText.innerText = "IA Falando...";
             transText.innerText = text;
+            log("Gerando voz pastoral...");
 
+            try {
+                // Remove qualquer áudio tocando
+                if (window.currentAudio) {
+                    window.currentAudio.pause();
+                    window.currentAudio = null;
+                }
+
+                const audioUrl = `/api/tts?text=${encodeURIComponent(text)}`;
+                const audio = new Audio(audioUrl);
+                window.currentAudio = audio;
+
+                audio.onplay = () => {
+                    log("Iniciou fala neural");
+                    animateBars();
+                };
+
+                audio.onended = () => {
+                    log("Terminou fala neural");
+                    isSpeaking = false;
+                    if (isActive) {
+                        setTimeout(() => {
+                            if (isActive && !isSpeaking) startListening();
+                        }, 500);
+                    }
+                };
+
+                audio.onerror = (e) => {
+                    log("Erro áudio neural. Usando voz do sistema...");
+                    fallbackSpeak(text);
+                };
+
+                await audio.play();
+            } catch (err) {
+                log("Erro ao tocar áudio: " + err.message);
+                fallbackSpeak(text);
+            }
+        }
+
+        function fallbackSpeak(text) {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'pt-BR';
-            utterance.rate = 1;
-
-            // Voice selection logic
-            const voices = synth.getVoices();
-            const ptVoice = voices.find(v => v.lang === 'pt-BR' && v.name.includes('Google')) || voices.find(v => v.lang === 'pt-BR');
-            if (ptVoice) utterance.voice = ptVoice;
-
-            utterance.onstart = () => {
-                log("Iniciou fala");
-                animateBars();
-            };
-
+            utterance.onstart = () => animateBars();
             utterance.onend = () => {
-                log("Terminou fala");
                 isSpeaking = false;
-                if (isActive) {
-                    // Espera um pouco e volta a ouvir automaticamente para um fluxo fluído
-                    setTimeout(() => {
-                        if (isActive && !isSpeaking) startListening();
-                    }, 500);
-                }
+                if (isActive) setTimeout(startListening, 500);
             };
-
-            utterance.onerror = (e) => log("Synthesis error: " + e.error);
-
             synth.speak(utterance);
         }
 

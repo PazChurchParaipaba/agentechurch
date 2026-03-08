@@ -267,6 +267,31 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
 });
 
 // Rota de Chat de Voz (Interação via Navegador)
+import { textToSpeech } from './services/tts';
+import * as fs from 'fs';
+
+app.get('/api/tts', async (req: Request, res: Response) => {
+    const text = req.query.text as string;
+    if (!text) return res.status(400).send('Texto necessário');
+    try {
+        const audioPath = await textToSpeech(text);
+        if (audioPath && fs.existsSync(audioPath)) {
+            res.setHeader('Content-Type', 'audio/mpeg');
+            const stream = fs.createReadStream(audioPath);
+            stream.pipe(res);
+            // Opcional: deletar arquivo após stream, mas para simplicidade e cache deixamos por enquanto 
+            // ou removemos com um timeout curto.
+            stream.on('end', () => {
+                setTimeout(() => { try { fs.unlinkSync(audioPath); } catch (e) { } }, 5000);
+            });
+        } else {
+            res.status(500).send('Erro ao gerar áudio');
+        }
+    } catch (e) {
+        res.status(500).send('Erro TTS');
+    }
+});
+
 app.post('/api/voice-chat', async (req, res) => {
     const { message, text, cid } = req.body;
     const input = message || text;
