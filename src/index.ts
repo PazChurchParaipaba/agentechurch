@@ -274,6 +274,19 @@ app.post('/api/send-message', async (req, res) => {
     }
 });
 
+// Atendimento por Voz (Real-time AI Chat)
+import { getAIResponse } from './services/ai';
+app.post('/api/voice-chat', async (req: Request, res: Response) => {
+    const { text, cid } = req.body;
+    if (!text) return res.status(400).json({ error: 'Texto obrigatório' });
+    try {
+        const response = await getAIResponse(text, `voice-chat-${cid || 'anon'}`);
+        res.json({ response });
+    } catch (e) {
+        res.status(500).json({ error: 'Erro IA' });
+    }
+});
+
 // Rota Admin - Proteção básica poderia ser aqui também
 app.get('/admin', (req, res) => {
     res.sendFile('admin.html', { root: 'public' });

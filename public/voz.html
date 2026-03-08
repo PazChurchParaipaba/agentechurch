@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voz Real-Time | Paz Church Paraipaba</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at center, #0f172a, #020617);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+        }
+        .pulse {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            border-radius: 50%;
+            box-shadow: 0 0 50px rgba(99, 102, 241, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            position: relative;
+            z-index: 10;
+        }
+        .pulse:hover {
+            transform: scale(1.05);
+        }
+        .pulse.listening {
+            animation: pulse-animation 1.5s infinite;
+        }
+        .pulse.thinking {
+            animation: thinking-animation 1s infinite alternate;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(1); box-shadow: 0 0 50px rgba(99, 102, 241, 0.5); }
+            50% { transform: scale(1.1); box-shadow: 0 0 100px rgba(168, 85, 247, 0.8); }
+            100% { transform: scale(1); box-shadow: 0 0 50px rgba(99, 102, 241, 0.5); }
+        }
+        @keyframes thinking-animation {
+            from { filter: hue-rotate(0deg) brightness(1); }
+            to { filter: hue-rotate(90deg) brightness(1.2); }
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2rem;
+            padding: 2rem;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            position: relative;
+        }
+        .status-text {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            min-height: 1.5em;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sub-text {
+            font-size: 0.9rem;
+            opacity: 0.6;
+            margin-top: 0.5rem;
+        }
+        .orb-bg {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+            z-index: 1;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="orb-bg"></div>
+    
+    <div class="glass-card">
+        <h1 class="text-2xl font-bold mb-8">Paz Voice AI</h1>
+        
+        <div id="interactionBtn" class="pulse mx-auto" onclick="toggleConversation()">
+            <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+        </div>
+
+        <p id="status" class="status-text">Toque para começar</p>
+        <p id="subStatus" class="sub-text">Clique no microfone para conversar</p>
+
+        <div class="mt-8 flex justify-center gap-2">
+            <div class="w-1 h-8 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+            <div class="w-1 h-12 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            <div class="w-1 h-8 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.3s"></div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const cid = urlParams.get('cid') || 'anonymous-' + Math.random().toString(36).substr(2, 9);
+        const API_URL = location.origin + '/api/voice-chat';
+
+        let isActive = false;
+        let recognition;
+        let synthesis = window.speechSynthesis;
+        let voices = [];
+
+        // Inicializar Vozes
+        window.speechSynthesis.onvoiceschanged = () => {
+            voices = window.speechSynthesis.getVoices();
+        };
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'pt-BR';
+
+            recognition.onstart = () => {
+                updateUI('listening', 'Estou ouvindo...', 'Pode falar!');
+            };
+
+            recognition.onerror = (event) => {
+                console.error(event);
+                updateUI('idle', 'Ocorreu um erro', 'Clique para tentar novamente');
+            };
+
+            recognition.onresult = async (event) => {
+                const text = event.results[0][0].transcript;
+                updateUI('thinking', 'Pensando...', `"${text}"`);
+                
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, cid })
+                    });
+                    const data = await response.json();
+                    speak(data.response);
+                } catch (err) {
+                    speak("Desculpe, tive um problema de conexão. Pode repetir?");
+                }
+            };
+
+            recognition.onend = () => {
+                if (isActive) {
+                    // Esperando o speaking terminar ou reiniciando
+                }
+            };
+        }
+
+        function toggleConversation() {
+            if (!isActive) {
+                isActive = true;
+                startListening();
+            } else {
+                isActive = false;
+                stopEverything();
+            }
+        }
+
+        function startListening() {
+            if (synthesis.speaking) synthesis.cancel();
+            recognition.start();
+        }
+
+        function stopEverything() {
+            recognition.stop();
+            synthesis.cancel();
+            updateUI('idle', 'Toque para começar', 'Clique no microfone para conversar');
+        }
+
+        function speak(text) {
+            updateUI('speaking', 'Falando...', 'Preste atenção 🙏');
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            
+            // Tentar vozes premium do Google se disponíveis
+            const prVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('pt'));
+            if (prVoice) utterance.voice = prVoice;
+
+            utterance.pitch = 1;
+            utterance.rate = 1;
+
+            utterance.onend = () => {
+                if (isActive) {
+                    setTimeout(startListening, 500); // Volta a ouvir depois de falar
+                } else {
+                    updateUI('idle', 'Toque para começar', 'Respostas por voz ativadas');
+                }
+            };
+            synthesis.speak(utterance);
+        }
+
+        function updateUI(state, status, sub) {
+            const btn = document.getElementById('interactionBtn');
+            const statusEl = document.getElementById('status');
+            const subStatusEl = document.getElementById('subStatus');
+            
+            statusEl.innerText = status;
+            subStatusEl.innerText = sub;
+
+            btn.classList.remove('listening', 'thinking');
+            if (state === 'listening') btn.classList.add('listening');
+            if (state === 'thinking') btn.classList.add('thinking');
+            if (state === 'speaking') {
+                btn.style.animation = 'pulse-animation 2s infinite linear';
+            } else {
+                btn.style.animation = '';
+            }
+        }
+    </script>
+</body>
+</html>
