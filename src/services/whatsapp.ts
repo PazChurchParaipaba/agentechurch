@@ -167,8 +167,9 @@ export class WhatsAppService {
                         const groupMeta = await this.sock?.groupMetadata(groupId);
                         const groupName = groupMeta?.subject;
 
-                        for (const memberId of newMembers) {
+                        for (const member of newMembers) {
                             // Monta a mensagem mencionando o novo membro
+                            const memberId = member.id;
                             const welcomeMessage = `Olá, @${memberId.split('@')[0]}! 👋\n\nSeja muito bem-vindo(a) à família *${groupName}*! Que alegria ter você conosco. Sinta-se em casa! 🕊️✨`;
                             
                             // Envia a mensagem para o grupo, com a menção
