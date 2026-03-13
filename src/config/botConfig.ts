@@ -1,6 +1,27 @@
 import fs from 'fs';
 import path from 'path';
 
+// --- CONFIGURAÇÕES GERAIS DA IGREJA ---
+// IMPORTANTE: Substitua os valores de exemplo pelos dados reais da sua igreja.
+export const churchConfig = {
+    // Coordenadas do local do culto para o check-in por GPS.
+    // Exemplo para o centro de Paraipaba, CE. Obtenha o valor real no Google Maps.
+    LOCATION: {
+        LATITUDE: -3.4338,  // Exemplo
+        LONGITUDE: -39.0044 // Exemplo
+    },
+    // Raio em metros para que o check-in por GPS seja considerado válido.
+    CHECKIN_RADIUS_METERS: 200,
+
+    // Horário do culto de domingo (formato 24h)
+    SUNDAY_SERVICE_TIME: {
+        START_HOUR: 17, // 17h
+        START_MINUTE: 30, // 30min
+        END_HOUR: 20,     // 20h
+        END_MINUTE: 0     // 00min
+    }
+};
+
 // Estrutura de cada funcionalidade
 export interface BotFeature {
     id: string;

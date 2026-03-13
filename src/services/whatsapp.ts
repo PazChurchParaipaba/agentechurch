@@ -157,6 +157,32 @@ export class WhatsAppService {
 
             this.sock.ev.on('creds.update', saveCreds);
 
+            // Listener para dar as boas-vindas a novos membros (Funcionalidade 3)
+            this.sock.ev.on('group-participants.update', async (event) => {
+                if (event.action === 'add') {
+                    const groupId = event.id;
+                    const newMembers = event.participants;
+                    try {
+                        // Busca o nome do grupo
+                        const groupMeta = await this.sock?.groupMetadata(groupId);
+                        const groupName = groupMeta?.subject;
+
+                        for (const memberId of newMembers) {
+                            // Monta a mensagem mencionando o novo membro
+                            const welcomeMessage = `Olá, @${memberId.split('@')[0]}! 👋\n\nSeja muito bem-vindo(a) à família *${groupName}*! Que alegria ter você conosco. Sinta-se em casa! 🕊️✨`;
+                            
+                            // Envia a mensagem para o grupo, com a menção
+                            await this.sock?.sendMessage(groupId, {
+                                text: welcomeMessage,
+                                mentions: [memberId]
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Erro ao dar boas-vindas a novo membro:', error);
+                    }
+                }
+            });
+
             this.sock.ev.on('messages.upsert', async (m: any) => {
                 const msg = m.messages[0];
                 if (!msg.message || m.type !== 'notify') return;
@@ -202,10 +228,17 @@ export class WhatsAppService {
                 const phone = remoteJid.replace(/\D/g, '');
                 const isGroup = remoteJid.includes('@g.us');
 
+                // NOVA LÓGICA DE GRUPO: Responder apenas se for mencionado ou se for um comando.
                 if (isGroup) {
-                    const botId = this.sock?.user?.id.split(':')[0];
-                    const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.includes(botId + '@s.whatsapp.net') || lowerText.includes('@' + botId);
-                    if (!mentioned && !lowerText.startsWith('!')) return;
+                    const botJid = this.sock?.user?.id;
+                    // a menção pode vir no contextInfo (oficial) ou no texto (manual)
+                    const mentionedJid = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                    const isMentioned = mentionedJid.includes(botJid);
+
+                    // Só processa se for menção ou comando com "!"
+                    if (!isMentioned && !lowerText.startsWith('!')) {
+                        return; // Ignora a mensagem no grupo se não for para o bot
+                    }
                 }
 
                 // Fluxo de Cadastro e Quiz
@@ -344,8 +377,153 @@ export class WhatsAppService {
                     return;
                 }
 
+                // --- ANÁLISE DE INTERCESSÃO (FUNCIONALIDADE 7 - AVANÇADA) ---
+                if (lowerText.startsWith('!analisarintercessao')) {
+                    const leaderJid = this.LEADER_PHONE ? `${this.LEADER_PHONE}@s.whatsapp.net` : '';
+                    if (!leaderJid || remoteJid !== leaderJid || !isGroup) {
+                        await this.sendMessage(remoteJid, "Este é um comando avançado de análise e restrito à liderança.");
+                        return;
+                    }
+
+                    const groupId = msg.key.remoteJid;
+                    if (!groupId) return;
+
+                    await this.sendMessage(leaderJid, `🔬 *Análise de Intercessão Iniciada...*\n\nVou analisar o histórico recente deste grupo para identificar padrões de comportamento de intercessores. Isso pode levar um minuto...`);
+                    
+                    try {
+                        // NOTA: A busca de histórico real no Baileys é muito complexa.
+                        // Esta é uma implementação de PROVA DE CONCEITO que assume que as mensagens
+                        // são logadas em uma tabela 'messages_log' no Supabase.
+                        // Sem esse log, a análise não funcionará.
+                        const { data: recentMessages, error } = await supabase
+                            .from('messages_log') // Tabela hipotética
+                            .select('sender_name, content')
+                            .eq('group_id', groupId)
+                            .order('created_at', { ascending: false })
+                            .limit(100);
+                        
+                        let historyText = "";
+                        if (error || !recentMessages || recentMessages.length === 0) {
+                            historyText = "Não foi possível carregar um histórico de mensagens detalhado para análise. O resultado será baseado em conhecimento geral.";
+                            console.warn("Não foi possível buscar histórico do grupo para análise. A tabela 'messages_log' existe e contém dados?");
+                        } else {
+                            historyText = recentMessages.map(m => `${m.sender_name}: ${m.content}`).join('\n');
+                        }
+
+                        const { getAIResponse } = await import('./ai');
+                        const analysisPrompt = `
+                            Aja como um analista de comportamento e teólogo sênior. Sua tarefa é analisar o seguinte histórico de conversas de um grupo de WhatsApp da igreja e identificar de 3 a 5 membros com maior probabilidade de pertencerem ao ministério de intercessão.
+
+                            **Critérios de Análise:**
+                            1.  **Proatividade em Oração:** Quem se oferece para orar pelos outros sem que seja pedido?
+                            2.  **Linguagem Espiritual:** Quem utiliza termos como "batalha espiritual", "jejum", "clamor", "guerra espiritual" e demonstra autoridade em suas orações?
+                            3.  **Profundidade Teológica:** Quem vai além do "estou orando" e oferece conselhos bíblicos sólidos, versículos específicos e palavras de encorajamento profundas e bem fundamentadas?
+                            4.  **Consistência:** Quem exibe esse comportamento de forma consistente?
+
+                            **Histórico da Conversa para Análise:**
+                            """
+                            ${historyText}
+                            """
+
+                            **Formato do Relatório:**
+                            Gere um relatório confidencial em markdown para a liderança. Para cada "candidato", liste o nome e as evidências (frases ou resumo do comportamento) que justificam sua inclusão na lista. Seja analítico e direto ao ponto. Finalize com um breve resumo de sua conclusão.
+                        `;
+
+                        const report = await getAIResponse(analysisPrompt, leaderJid);
+                        
+                        await this.sendMessage(leaderJid, `*Relatório Confidencial de Análise de Intercessão* 🕵️‍♂️\n\nCom base nos padrões de conversa, aqui estão os membros com maior potencial de intercessão que identifiquei:\n\n${report}`);
+
+                    } catch (e) {
+                        await this.sendMessage(leaderJid, "Ocorreu um erro durante a análise. A IA pode estar sobrecarregada ou a estrutura de dados de histórico não foi encontrada.");
+                        console.error("Erro na análise de intercessão:", e);
+                    }
+                    return;
+                }
+
                 if (msg.message.locationMessage) {
                     const { degreesLatitude, degreesLongitude } = msg.message.locationMessage;
+                    if (!degreesLatitude || !degreesLongitude) return;
+
+                    // --- LÓGICA DE CHECK-IN AUTOMÁTICO (FUNCIONALIDADE 5) ---
+                    const { churchConfig } = await import('../config/botConfig');
+                    const { calculateDistance } = await import('../utils/location');
+
+                    const now = new Date();
+                    // Ajuste para o fuso horário de São Paulo (-3 GMT)
+                    const spTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+                    const isSunday = spTime.getDay() === 0; // 0 = Domingo
+
+                    const serviceStart = new Date(spTime);
+                    serviceStart.setHours(churchConfig.SUNDAY_SERVICE_TIME.START_HOUR, churchConfig.SUNDAY_SERVICE_TIME.START_MINUTE, 0, 0);
+                    
+                    const serviceEnd = new Date(spTime);
+                    serviceEnd.setHours(churchConfig.SUNDAY_SERVICE_TIME.END_HOUR, churchConfig.SUNDAY_SERVICE_TIME.END_MINUTE, 0, 0);
+
+                    // Verifica se é domingo e se está no horário do culto
+                    if (isSunday && spTime >= serviceStart && spTime <= serviceEnd) {
+                        const distanceInKm = calculateDistance(
+                            degreesLatitude,
+                            degreesLongitude,
+                            churchConfig.LOCATION.LATITUDE,
+                            churchConfig.LOCATION.LONGITUDE
+                        );
+                        const distanceInMeters = distanceInKm * 1000;
+
+                        if (distanceInMeters <= churchConfig.CHECKIN_RADIUS_METERS) {
+                            // Está no raio, proceder com o check-in
+                            const phone = remoteJid.replace(/\D/g, '');
+                            const { data: member, error: memberError } = await supabase
+                                .from('members_paraipaba')
+                                .select('id, name')
+                                .or(`phone.eq.${phone},phone.eq.55${phone}`)
+                                .maybeSingle();
+
+                            if (memberError || !member) {
+                                await this.sendMessage(remoteJid, "Você está na igreja, que bênção! Mas não te encontrei no nosso cadastro para fazer o check-in. Fale com alguém da recepção! 😊");
+                                return;
+                            }
+
+                            // Verifica se já fez check-in hoje
+                            const todayStr = spTime.toISOString().split('T')[0]; // YYYY-MM-DD
+                            const { data: existingCheckin, error: checkinError } = await supabase
+                                .from('checkin_log')
+                                .select('id')
+                                .eq('member_id', member.id)
+                                .gte('checkin_at', `${todayStr}T00:00:00Z`)
+                                .lte('checkin_at', `${todayStr}T23:59:59Z`)
+                                .maybeSingle();
+
+                            if (existingCheckin) {
+                                await this.sendMessage(remoteJid, `Oi, ${member.name}! Seu check-in de hoje já foi registrado. Bom culto! 🙏`);
+                                return;
+                            }
+
+                            // Insere o novo check-in
+                            const { error: newCheckinError } = await supabase
+                                .from('checkin_log')
+                                .insert({ member_id: member.id, event_name: 'Culto de Domingo' });
+
+                            if (newCheckinError) {
+                                await this.sendMessage(remoteJid, "Tentei fazer seu check-in, mas algo deu errado no sistema. Avise alguém da recepção, por favor.");
+                            } else {
+                                await this.sendMessage(remoteJid, `✅ *Check-in realizado com sucesso, ${member.name}!* \n\nQue alegria ter você aqui conosco. Tenha um culto abençoado! 🕊️`);
+                            }
+
+                        } else {
+                            // Fora do raio, assume que quer encontrar a Life
+                            await this.sendMessage(remoteJid, "Você parece estar um pouco longe para fazer o check-in no culto. Se a ideia era achar a Life Group mais próxima, vou procurar aqui...");
+                            const { data: lives } = await supabase.from('lives_mondubim').select('*');
+                            if (lives) {
+                                const nearest = findNearestLife(degreesLatitude, degreesLongitude, lives);
+                                if (nearest) await this.sendMessage(remoteJid, `📍 Encontrei a Life *${nearest.name}*!\nLíder: ${nearest.leader_name}\nEndereço: ${nearest.address}\nDistância: ${nearest.distance.toFixed(2)}km`);
+                                else await this.sendMessage(remoteJid, "Não encontrei nenhuma Life próxima.");
+                            }
+                        }
+                        return; // Finaliza o fluxo aqui
+                    }
+                    // --- FIM DA LÓGICA DE CHECK-IN ---
+                    
+                    // Comportamento padrão se não for horário de culto
                     const { data: lives } = await supabase.from('lives_mondubim').select('*');
                     if (lives) {
                         const nearest = findNearestLife(degreesLatitude, degreesLongitude, lives);
