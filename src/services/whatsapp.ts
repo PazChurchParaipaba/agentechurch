@@ -2,6 +2,7 @@ import { default as makeWASocket, useMultiFileAuthState, DisconnectReason, WASoc
 import { Boom } from '@hapi/boom';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Buffer } from 'buffer';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import { supabase } from '../config/supabase';
@@ -97,30 +98,49 @@ export class WhatsAppService {
             }
 
             this.sock = makeWASocket({
-                logger: pino({ level: 'silent' }),
+                logger: pino({ level: 'warn' }), // Aumentado de silent para warn para ajudar no debug
                 auth: state,
                 version,
+                browser: Browsers.ubuntu('Chrome'), // Identifica o bot como um navegador Chrome no Ubuntu para evitar quedas
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 25000,
+                keepAliveIntervalMs: 60000, // Intervalo de 60 segundos para manter a conexão ativa
+                defaultQueryTimeoutMs: undefined,
+                connectTimeoutMs: 60000,
+                retryRequestDelayMs: 5000,
             });
 
             this.sock.ev.on('connection.update', (update: any) => {
                 const { connection, lastDisconnect, qr } = update;
+                
                 if (qr) {
                     this.qrCodeString = qr;
                     qrcode.generate(qr, { small: true });
+                    console.log('📢 Novo código QR gerado. Por favor, escaneie.');
                 }
+
                 if (connection === 'close') {
                     this.isConnected = false;
                     const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                    const reason = (lastDisconnect?.error as Boom)?.message || 'Erro desconhecido';
+                    
+                    console.log(`🔌 Conexão encerrada. Código: ${statusCode}, Razão: ${reason}`);
+
                     if (statusCode === DisconnectReason.loggedOut) {
+                        console.log('🚪 Logout detectado. Limpando sessão...');
                         const authPath = path.resolve(this.authStateStr);
                         if (fs.existsSync(authPath)) fs.rmSync(authPath, { recursive: true, force: true });
+                        this.retryCount = 0;
+                    } else if (statusCode === DisconnectReason.connectionLost) {
+                        console.log('📡 Conexão perdida. Tentando reconectar...');
+                    } else if (statusCode === DisconnectReason.restartRequired) {
+                        console.log('🔄 Reinicialização necessária.');
                     }
+
                     this.retryCount++;
                     this.scheduleReconnect(10000);
                 } else if (connection === 'open') {
+                    console.log('✅ Conexão estabelecida com sucesso!');
                     this.isConnected = true;
                     this.qrCodeString = null;
                     this.retryCount = 0;

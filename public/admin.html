@@ -51,7 +51,7 @@
         <header
             class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
             <div>
-                <h1 class="text-3xl font-bold gradient-text">Paz Church Mondubim</h1>
+                <h1 class="text-3xl font-bold gradient-text">Paz Church Paraipaba</h1>
                 <p class="text-gray-500 mt-1">Painel Administrativo do Agente Igreja</p>
             </div>
             <div class="flex flex-wrap gap-3">
@@ -64,6 +64,11 @@
                     class="px-4 py-2 border border-orange-200 text-orange-600 rounded-xl font-medium hover:bg-orange-50 transition flex items-center gap-2"
                     title="Forçar reconexão do WhatsApp">
                     🔄 Reconectar WA
+                </button>
+                <button onclick="clearSession()" id="clearSessionBtn"
+                    class="px-4 py-2 border border-red-200 text-red-600 rounded-xl font-medium hover:bg-red-50 transition flex items-center gap-2"
+                    title="Limpar arquivos de sessão e reconectar (Use se travar)">
+                    🧹 Limpar Sessão
                 </button>
                 <button onclick="toggleMaintenance()" id="maintenanceBtn"
                     class="px-4 py-2 border border-gray-300 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition flex items-center gap-2">
@@ -318,6 +323,36 @@
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '🔄 Reconectar WA';
+            }
+        }
+
+        async function clearSession() {
+            const result = await Swal.fire({
+                title: 'Limpar Sessão?',
+                text: "Isso removerá os arquivos de autenticação e forçará um novo QR Code. Use apenas se a conexão estiver travada.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sim, limpar e reiniciar!'
+            });
+
+            if (result.isConfirmed) {
+                const btn = document.getElementById('clearSessionBtn');
+                btn.disabled = true;
+                btn.textContent = '⏳ Limpando...';
+                try {
+                    const res = await fetch(getApiUrl().replace('/api', '') + '/api/clear-session', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const data = await res.json();
+                    Swal.fire('Sessão Limpa', data.message || 'Sessão removida com sucesso!', 'success');
+                } catch (e) {
+                    Swal.fire('Erro', 'Não foi possível limpar a sessão.', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '🧹 Limpar Sessão';
+                }
             }
         }
 

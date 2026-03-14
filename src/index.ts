@@ -1,9 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import * as path from 'path';
+import * as fs from 'fs';
 import { supabase } from './config/supabase';
 import { waService } from './services/whatsapp';
 import { initScheduler } from './services/scheduler';
 import { getFeatures, saveFeatures } from './config/botConfig';
+import { textToSpeech } from './services/tts';
 
 import multer from 'multer';
 
@@ -54,6 +57,22 @@ app.post('/api/reconnect', authMiddleware, async (req: Request, res: Response) =
     console.log('🔄 Reconexão manual solicitada via API...');
     await waService.connectToWhatsApp();
     res.json({ success: true, message: 'Tentativa de reconexão iniciada.' });
+});
+
+// Rota para Limpar Sessão (Admin) - Útil se a conexão travar
+app.post('/api/clear-session', authMiddleware, async (req: Request, res: Response) => {
+    console.log('🧹 Limpeza de sessão solicitada via API...');
+    const authPath = path.resolve('auth_session_v2');
+    if (fs.existsSync(authPath)) {
+        try {
+            fs.rmSync(authPath, { recursive: true, force: true });
+            console.log('✅ Pasta de sessão removida.');
+        } catch (e) {
+            console.error('❌ Erro ao remover pasta de sessão:', e);
+        }
+    }
+    await waService.connectToWhatsApp();
+    res.json({ success: true, message: 'Sessão limpa e tentativa de reconexão iniciada.' });
 });
 
 // --- API Endpoints ---
@@ -267,9 +286,6 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
 });
 
 // Rota de Chat de Voz (Interação via Navegador)
-import { textToSpeech } from './services/tts';
-import * as fs from 'fs';
-
 app.get('/api/tts', async (req: Request, res: Response) => {
     const text = req.query.text as string;
     if (!text) return res.status(400).send('Texto necessário');
