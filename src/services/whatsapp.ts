@@ -98,16 +98,16 @@ export class WhatsAppService {
             }
 
             this.sock = makeWASocket({
-                logger: pino({ level: 'warn' }), // Aumentado de silent para warn para ajudar no debug
+                logger: pino({ level: 'silent' }), // Silencioso para economizar memória
                 auth: state,
                 version,
-                browser: Browsers.ubuntu('Chrome'), // Identifica o bot como um navegador Chrome no Ubuntu para evitar quedas
+                browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 60000, // Intervalo de 60 segundos para manter a conexão ativa
-                defaultQueryTimeoutMs: undefined,
+                keepAliveIntervalMs: 60000,
                 connectTimeoutMs: 60000,
                 retryRequestDelayMs: 5000,
+                generateHighQualityLinkPreview: false,
             });
 
             this.sock.ev.on('connection.update', (update: any) => {
@@ -115,8 +115,7 @@ export class WhatsAppService {
                 
                 if (qr) {
                     this.qrCodeString = qr;
-                    qrcode.generate(qr, { small: true });
-                    console.log('📢 Novo código QR gerado. Por favor, escaneie.');
+                    console.log('📢 Novo QR gerado.');
                 }
 
                 if (connection === 'close') {
@@ -127,20 +126,13 @@ export class WhatsAppService {
                     console.log(`🔌 Conexão encerrada. Código: ${statusCode}, Razão: ${reason}`);
 
                     if (statusCode === DisconnectReason.loggedOut) {
-                        console.log('🚪 Logout detectado. Limpando sessão...');
                         const authPath = path.resolve(this.authStateStr);
                         if (fs.existsSync(authPath)) fs.rmSync(authPath, { recursive: true, force: true });
                         this.retryCount = 0;
-                    } else if (statusCode === DisconnectReason.connectionLost) {
-                        console.log('📡 Conexão perdida. Tentando reconectar...');
-                    } else if (statusCode === DisconnectReason.restartRequired) {
-                        console.log('🔄 Reinicialização necessária.');
                     }
-
                     this.retryCount++;
                     this.scheduleReconnect(10000);
                 } else if (connection === 'open') {
-                    console.log('✅ Conexão estabelecida com sucesso!');
                     this.isConnected = true;
                     this.qrCodeString = null;
                     this.retryCount = 0;
@@ -245,9 +237,14 @@ export class WhatsAppService {
                     this.userStates[remoteJid].notifiedInactivity = false;
                 }
 
-                const lowerText = textBody ? textBody.toLowerCase() : '';
                 const phone = remoteJid.replace(/\D/g, '');
                 const isGroup = remoteJid.includes('@g.us');
+
+                const now = new Date();
+                const spTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+                const isSunday = spTime.getDay() === 0; // 0 = Domingo
+                const dayName = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][spTime.getDay()];
+                const lowerText = textBody ? textBody.toLowerCase() : '';
 
                 // NOVA LÓGICA DE GRUPO: Responder apenas se for mencionado ou se for um comando.
                 if (isGroup) {
@@ -339,9 +336,26 @@ export class WhatsAppService {
                     const isNewMemberAction = lowerText.includes('cadastrar') || lowerText.includes('visita') || lowerText.includes('culto') || lowerText.includes('paz paraipaba');
 
                     if (!member) {
-                        const welcomeMsg = `Olá! Que alegria ter você conosco aqui na *Paz Church Paraipaba*! 🕊️✨\n\nSeja muito bem-vindo(a)! Ficamos felizes em te receber no nosso culto. Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?\n\nPara começar, qual seu *nome completo*?`;
+                        const welcomeMsgSuffix = isSunday 
+                            ? "Ficamos felizes em te receber no nosso culto. Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?"
+                            : "Ficamos muito felizes com seu contato! Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?";
 
-                        await this.sendMessage(remoteJid, welcomeMsg);
+                        const welcomeMsg = `Olá! Que alegria ter você conosco aqui na *Paz Church Paraipaba*! 🕊️✨\n\nSeja muito bem-vindo(a)! ${welcomeMsgSuffix}\n\nPara começar, qual seu *nome completo*?`;
+
+                        if (isAudioMessage) {
+                            const { getAIResponse } = await import('./ai');
+                            const greeting = await getAIResponse(`Aja como o Agente da Igreja. Dê as boas vindas a um NOVO visitante que acabou de mandar um áudio. Diga que é uma alegria tê-lo conosco e peça educadamente o nome completo dele para iniciar o cadastro. Hoje é ${dayName}.`, remoteJid);
+                            const audioPath = await textToSpeech(greeting);
+                            if (audioPath) {
+                                await this.sendAudioMessage(remoteJid, audioPath);
+                                limparAudioTemp(audioPath);
+                                await this.sendMessage(remoteJid, "*[Cadastro Iniciado]* Por favor, me diga seu nome completo.");
+                            } else {
+                                await this.sendMessage(remoteJid, welcomeMsg);
+                            }
+                        } else {
+                            await this.sendMessage(remoteJid, welcomeMsg);
+                        }
                         this.userStates[remoteJid] = {
                             type: 'REGISTRATION',
                             step: 'WAITING_NAME',
@@ -350,22 +364,64 @@ export class WhatsAppService {
                             notifiedInactivity: false
                         };
                         return;
-                    } else if (isNewMemberAction) {
-                        // Se já é membro mas mandou a palavra do QR Code, apenas saúda
-                        await this.sendMessage(remoteJid, `Olá, *${member.name}*! Que bom te ver por aqui novamente no nosso culto! 🙏✨ Como posso te ajudar hoje?`);
+                    } else if (isNewMemberAction && !isAudioMessage) {
+                        // Se já é membro mas mandou a palavra do QR Code (e não é áudio), apenas saúda
+                        const greetingSuffix = isSunday ? " novamente no nosso culto!" : "!";
+                        await this.sendMessage(remoteJid, `Olá, *${member.name}*! Que bom te ver por aqui${greetingSuffix} 🙏✨ Como posso te ajudar hoje?`);
                         return;
                     }
                 }
 
                 // Menu e Comandos
                 if (lowerText === 'oi' || lowerText === 'menu' || lowerText === 'ajuda') {
-                    await this.sendMessage(remoteJid, "Como posso te ajudar hoje?\n\n1️⃣ Horários e Endereço\n2️⃣ Quero doar (Pix)\n3️⃣ Onde tem uma Life?\n4️⃣ Conversar com a IA\n5️⃣ Falar com a Liderança\n\n!oração [pedido] - Pedir oração\n!quiz - Quiz Bíblico");
+                    const menu = "Como posso te ajudar hoje?\n\n1️⃣ Horários e Endereço\n2️⃣ Quero doar (Pix)\n3️⃣ Onde tem uma Life?\n4️⃣ Conversar com a IA\n5️⃣ Falar com a Liderança\n\n!oração [pedido] - Pedir oração\n!quiz - Quiz Bíblico";
+                    if (isAudioMessage) {
+                        const audioPath = await textToSpeech("Olá! Eu sou o assistente da Paz Church Paraipaba. Como posso te ajudar hoje? Você pode escolher uma das opções abaixo ou apenas continuar falando comigo.");
+                        if (audioPath) {
+                             await this.sendAudioMessage(remoteJid, audioPath);
+                             limparAudioTemp(audioPath);
+                        }
+                    }
+                    await this.sendMessage(remoteJid, menu);
                     return;
                 }
-                if (lowerText === '1') { await this.sendMessage(remoteJid, "📍 Paz Church Paraipaba - CE.\n⏰ Horário de Culto: Domingo às 17h30."); return; }
-                if (lowerText === '2') { await this.sendMessage(remoteJid, "🙏 Sua generosidade ajuda o Reino. Chave Pix: (confirme com a secretaria)."); return; }
-                if (lowerText === '3') { await this.sendMessage(remoteJid, "Mande sua localização clicando no clipe 📎 e encontrarei a Life mais próxima! 📍"); return; }
-                if (lowerText === '5') { await this.sendMessage(remoteJid, "Transferindo para a liderança... 🙏"); if (this.LEADER_PHONE) this.sendMessage(this.LEADER_PHONE + '@s.whatsapp.net', `Atendimento humano solicitado por ${phone}`); return; }
+                if (lowerText === '1') {
+                    const msg = `📍 Paz Church Paraipaba - CE.\n⏰ Horário de Culto: Domingo às 17h30.`;
+                    if (isAudioMessage) {
+                        const audioPath = await textToSpeech("Nós estamos localizados em Paraipaba, Ceará. Nossa Celebração da Família acontece todos os domingos às cinco e meia da tarde. Esperamos você!");
+                        if (audioPath) { await this.sendAudioMessage(remoteJid, audioPath); limparAudioTemp(audioPath); }
+                    }
+                    await this.sendMessage(remoteJid, msg); 
+                    return; 
+                }
+                if (lowerText === '2') {
+                    const msg = "🙏 Sua generosidade ajuda o Reino. Chave Pix: (confirme com a secretaria).";
+                    if (isAudioMessage) {
+                        const audioPath = await textToSpeech("Sua generosidade é muito importante para o Reino de Deus. Para doações via Pix, por favor confirme a chave atual com a nossa secretaria.");
+                        if (audioPath) { await this.sendAudioMessage(remoteJid, audioPath); limparAudioTemp(audioPath); }
+                    }
+                    await this.sendMessage(remoteJid, msg); 
+                    return; 
+                }
+                if (lowerText === '3') { 
+                    const msg = "Mande sua localização clicando no clipe 📎 e encontrarei a Life mais próxima! 📍";
+                    if (isAudioMessage) {
+                        const audioPath = await textToSpeech("Para encontrar a Life Group mais próxima de você, por favor, clique no ícone do clipe e envie sua localização atual.");
+                        if (audioPath) { await this.sendAudioMessage(remoteJid, audioPath); limparAudioTemp(audioPath); }
+                    }
+                    await this.sendMessage(remoteJid, msg); 
+                    return; 
+                }
+                if (lowerText === '5') { 
+                    const msg = "Transferindo para a liderança... 🙏";
+                    if (isAudioMessage) {
+                        const audioPath = await textToSpeech("Entendido. Estou transferindo seu atendimento para um de nossos líderes. Em breve eles entrarão em contato.");
+                        if (audioPath) { await this.sendAudioMessage(remoteJid, audioPath); limparAudioTemp(audioPath); }
+                    }
+                    await this.sendMessage(remoteJid, msg); 
+                    if (this.LEADER_PHONE) this.sendMessage(this.LEADER_PHONE + '@s.whatsapp.net', `Atendimento humano solicitado por ${phone}`); 
+                    return; 
+                }
 
                 if (lowerText.startsWith('!oração') || lowerText.startsWith('!oracao')) {
                     const pedido = textBody!.replace(/^!ora[çc]ao\s*/i, '').trim();
@@ -469,11 +525,7 @@ export class WhatsAppService {
                     const { churchConfig } = await import('../config/botConfig');
                     const { calculateDistance } = await import('../utils/location');
 
-                    const now = new Date();
-                    // Ajuste para o fuso horário de São Paulo (-3 GMT)
-                    const spTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-                    const isSunday = spTime.getDay() === 0; // 0 = Domingo
-
+                    // Verifica se é domingo e se está no horário do culto
                     const serviceStart = new Date(spTime);
                     serviceStart.setHours(churchConfig.SUNDAY_SERVICE_TIME.START_HOUR, churchConfig.SUNDAY_SERVICE_TIME.START_MINUTE, 0, 0);
                     
@@ -561,6 +613,9 @@ export class WhatsAppService {
 
                     // Modificação p/ f97: Se for imagem com legenda "reembolso", dar contexto extra p/ IA
                     let contextMessage = textBody || '';
+                    if (isAudioMessage) {
+                        contextMessage = `[O USUÁRIO ENVIOU UM ÁUDIO] Responda de forma sucinta e amigável. Hoje é ${dayName}. Contexto: ${contextMessage}`;
+                    }
                     if (imageBase64 && (lowerText.includes('reembolso') || lowerText.includes('nota') || lowerText.includes('recibo'))) {
                         contextMessage = `[MÓDULO REEMBOLSO ATIVO] Extraia o valor total e o nome do estabelecimento desta nota fiscal: ${contextMessage}`;
                     }
@@ -577,16 +632,18 @@ export class WhatsAppService {
                         } else if (matchPdf) {
                             const title = matchPdf[1].trim();
                             const content = matchPdf[2].trim();
-                            const pdfPath = path.join(__dirname, `../../${Date.now()}.pdf`);
+                            const pdfPath = path.join(__dirname, `../../temp_tts/pdf_${Date.now()}.pdf`);
                             const doc = new PDFDocument();
                             doc.pipe(fs.createWriteStream(pdfPath));
                             doc.fontSize(20).text(title, { align: 'center' }).moveDown().fontSize(12).text(content);
                             doc.end();
+                            
+                            // Bufferiza para não depender do disco por muito tempo
                             await new Promise(r => setTimeout(r, 1500));
-                            if (this.sock) {
+                            if (this.sock && fs.existsSync(pdfPath)) {
                                 await this.sock.sendMessage(remoteJid, { document: fs.readFileSync(pdfPath), fileName: `${title}.pdf`, mimetype: 'application/pdf' });
+                                try { fs.unlinkSync(pdfPath); } catch(_) {}
                             }
-                            fs.unlinkSync(pdfPath);
                         } else if (isAudioMessage || lowerText.startsWith('!voz')) {
                             const audioPath = await textToSpeech(aiResponse);
                             if (audioPath) {
