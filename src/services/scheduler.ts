@@ -89,12 +89,16 @@ export function initScheduler() {
         try {
             // 1. Obter a lista de todos os grupos em que o bot está
             let groups: { id: string, subject: string }[] = [];
-            if (waService.sock) {
-                const allGroups = await waService.sock.groupFetchAllParticipating();
-                groups = Object.values(allGroups).map((g: any) => ({
-                    id: g.id,
-                    subject: g.subject
-                }));
+            if (waService.sock && waService.isConnected) {
+                try {
+                    const allGroups = await waService.sock.groupFetchAllParticipating();
+                    groups = Object.values(allGroups).map((g: any) => ({
+                        id: g.id,
+                        subject: g.subject
+                    }));
+                } catch (groupError) {
+                    console.error('Erro ao buscar grupos (socket pode estar instável):', groupError);
+                }
             }
 
             if (groups.length === 0) {
@@ -238,13 +242,18 @@ export function initScheduler() {
     // ---------------------------------------------------------------
     const SELF_URL = process.env.SELF_URL;
     if (SELF_URL) {
-        console.log(`💓 Keep-alive ativado → pingando ${SELF_URL} a cada 10 min`);
+        let finalUrl = SELF_URL.trim();
+        if (!finalUrl.startsWith('http')) {
+            finalUrl = `https://${finalUrl}`;
+        }
+        
+        console.log(`💓 Keep-alive ativado → pingando ${finalUrl} a cada 10 min`);
         cron.schedule('*/10 * * * *', async () => {
             try {
-                const res = await fetch(`${SELF_URL.replace(/\/$/, '')}/`);
+                const res = await fetch(`${finalUrl.replace(/\/$/, '')}/`);
                 console.log(`💓 Keep-alive OK (status ${res.status})`);
             } catch (e: any) {
-                console.warn(`💔 Keep-alive falhou: ${e.message}`);
+                console.warn(`💔 Keep-alive falhou em ${finalUrl}: ${e.message}`);
             }
         });
     } else {

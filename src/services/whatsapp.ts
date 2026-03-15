@@ -11,7 +11,7 @@ import { textToSpeech, limparAudioTemp } from './tts';
 import PDFDocument from 'pdfkit';
 
 interface UserState {
-    type: 'REGISTRATION' | 'QUIZ';
+    type: 'REGISTRATION' | 'QUIZ' | 'WEDDING';
     step?: string;
     data?: any;
     lastInteraction: number;
@@ -43,7 +43,8 @@ export class WhatsAppService {
                 const idleMs = Date.now() - this.lastMessageAt;
                 if (idleMs > 10 * 60 * 1000) {
                     try {
-                        this.sock?.sendPresenceUpdate('available', 'status@broadcast').catch(() => {
+                        this.sock?.sendPresenceUpdate('available').catch(() => {
+                            console.log('⚠️ Falha ao atualizar presença, marcando como offline.');
                             this.isConnected = false;
                             this.scheduleReconnect(5000);
                         });
@@ -51,9 +52,14 @@ export class WhatsAppService {
                         this.isConnected = false;
                         this.scheduleReconnect(5000);
                     }
+                } else if (!this.sock || !this.sock.user) {
+                    // Se o socket existe mas não tem usuário, algo está errado
+                    console.log('⚠️ Socket sem usuário detectado pelo watchdog.');
+                    this.isConnected = false;
+                    this.scheduleReconnect(5000);
                 }
             }
-        }, 3 * 60 * 1000);
+        }, 2 * 60 * 1000); // Check every 2 minutes instead of 3
 
         // Monitor de Inatividade (20 minutos)
         this.inactivityTimer = setInterval(() => {
@@ -98,19 +104,41 @@ export class WhatsAppService {
             }
 
             this.sock = makeWASocket({
-                logger: pino({ level: 'silent' }), // Silencioso para economizar memória
+                logger: pino({ level: 'silent' }), 
                 auth: state,
                 version,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: Browsers.macOS('Chrome'), // Browsers.ubuntu might be flagged as bot
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 60000,
+                keepAliveIntervalMs: 30000, // Reduced for faster detection
                 connectTimeoutMs: 60000,
+                defaultQueryTimeoutMs: 60000, // Added timeout for queries
                 retryRequestDelayMs: 5000,
                 generateHighQualityLinkPreview: false,
+                patchMessageBeforeSending: (message) => {
+                    const requiresPatch = !!(
+                        message.buttonsMessage ||
+                        message.templateMessage ||
+                        message.listMessage
+                    );
+                    if (requiresPatch) {
+                        return {
+                            viewOnceMessage: {
+                                message: {
+                                    messageContextInfo: {
+                                        deviceListMetadata: {},
+                                        deviceListMetadataVersion: 2
+                                    },
+                                    ...message
+                                }
+                            }
+                        };
+                    }
+                    return message;
+                }
             });
 
-            this.sock.ev.on('connection.update', (update: any) => {
+            this.sock.ev.on('connection.update', async (update: any) => {
                 const { connection, lastDisconnect, qr } = update;
                 
                 if (qr) {
@@ -125,14 +153,27 @@ export class WhatsAppService {
                     
                     console.log(`🔌 Conexão encerrada. Código: ${statusCode}, Razão: ${reason}`);
 
-                    if (statusCode === DisconnectReason.loggedOut) {
+                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+                    if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                        console.log('🚪 Deslogado ou Não Autorizado. Limpando credenciais...');
                         const authPath = path.resolve(this.authStateStr);
-                        if (fs.existsSync(authPath)) fs.rmSync(authPath, { recursive: true, force: true });
+                        if (fs.existsSync(authPath)) {
+                            try { fs.rmSync(authPath, { recursive: true, force: true }); } catch(e) {}
+                        }
                         this.retryCount = 0;
+                        this.qrCodeString = null;
+                        this.scheduleReconnect(5000);
+                    } else if (statusCode === 515 || statusCode === 428 || reason.includes('Stream Errored')) {
+                        console.log('⚠️ Erro de stream ou conexão terminada. Reiniciando socket...');
+                        this.scheduleReconnect(5000);
+                    } else {
+                        console.log(`🔄 Tentando reconectar em breve... Motivo: ${reason}`);
+                        this.retryCount++;
+                        this.scheduleReconnect(10000);
                     }
-                    this.retryCount++;
-                    this.scheduleReconnect(10000);
                 } else if (connection === 'open') {
+                    console.log('✅ Conexão estabelecida com sucesso!');
                     this.isConnected = true;
                     this.qrCodeString = null;
                     this.retryCount = 0;
@@ -157,7 +198,10 @@ export class WhatsAppService {
                         }
 
                         // Link Dinâmico Gratuito (voz.html hospedada localmente)
-                        const baseUrl = process.env.SELF_URL ? process.env.SELF_URL.replace(/\/$/, '') : 'http://localhost:3000';
+                        let baseUrl = process.env.SELF_URL ? process.env.SELF_URL.trim().replace(/\/$/, '') : 'http://localhost:3000';
+                        if (baseUrl !== 'http://localhost:3000' && !baseUrl.startsWith('http')) {
+                            baseUrl = `https://${baseUrl}`;
+                        }
                         const voiceRoomLink = `${baseUrl}/voz.html?cid=${from.split('@')[0]}`;
 
                         const msg = `🌟 *ATENDIMENTO POR VOZ EM REAL-TIME (GRÁTIS)* 🌟\n\nOlá! Notei sua ligação. Para conversarmos por voz em tempo real (estilo *ChatGPT Voice*), clique no link abaixo:\n\n🔗 ${voiceRoomLink}\n\nLá eu consigo te ouvir e falar sem custos! 🙏Paraipaba! 🎤`;
@@ -330,7 +374,63 @@ export class WhatsAppService {
                         return;
                     }
 
+                    // Lógica de Inscrição Casamento Coletivo
+                    if (state && state.type === 'WEDDING') {
+                        if (state.step === 'WAITING_COUPLE_NAME') {
+                            state.data.couple_names = textBody!.trim();
+                            state.step = 'WAITING_PHONE';
+                            await this.sendMessage(remoteJid, "2️⃣ Telefone para contato:");
+                            return;
+                        }
+                        if (state.step === 'WAITING_PHONE') {
+                            state.data.phone_contact = textBody!.trim();
+                            state.step = 'WAITING_CIVIL_STATUS';
+                            await this.sendMessage(remoteJid, "3️⃣ Situação do casamento civil:\nDigite o número da opção:\n\n1 - Já somos casados no civil\n2 - Ainda não somos casados no civil");
+                            return;
+                        }
+                        if (state.step === 'WAITING_CIVIL_STATUS') {
+                            const opt = textBody!.trim();
+                            if (opt === '1' || opt === '2') {
+                                state.data.civil_status = opt === '1' ? 'Já casados no civil' : 'Ainda não casados no civil';
+                                const { error } = await supabase.from('wedding_registrations').insert([{
+                                    couple_names: state.data.couple_names,
+                                    phone_contact: state.data.phone_contact,
+                                    civil_status: state.data.civil_status,
+                                    requester_jid: remoteJid
+                                }]);
+
+                                if (error) {
+                                    console.error("Erro wedding:", error);
+                                    await this.sendMessage(remoteJid, "Erro ao salvar sua inscrição. Por favor, tente novamente mais tarde.");
+                                } else {
+                                    await this.sendMessage(remoteJid, "Assim que recebermos suas respostas, nossa equipe irá analisar o cadastro e entrar em contato com vocês com mais informações sobre o casamento coletivo.\n\nDeus abençoe essa nova etapa da vida de vocês! 💙");
+                                    if (this.LEADER_PHONE) this.sendMessage(this.LEADER_PHONE + '@s.whatsapp.net', `🔔 Nova inscrição Casamento Coletivo: ${state.data.couple_names} (${state.data.phone_contact})`);
+                                }
+                                delete this.userStates[remoteJid];
+                                return;
+                            } else {
+                                await this.sendMessage(remoteJid, "Por favor, digite 1 ou 2.");
+                                return;
+                            }
+                        }
+                    }
+
                     const { data: member } = await supabase.from('members_paraipaba').select('id, name').or(`phone.eq.${phone},phone.eq.55${phone}`).maybeSingle();
+
+                    // Trigger Casamento Coletivo
+                    const isWeddingTrigger = lowerText.includes('casamento coletivo') || (lowerText.includes('casamento') && !member);
+                    if (isWeddingTrigger) {
+                        const welcomeWedding = `💍 CASAMENTO COLETIVO – PAZ CHURCH\n(27 DE JUNHO/2026)\n\nQue alegria receber o contato de vocês!\nPara iniciar o cadastro do Casamento Coletivo, responda as perguntas abaixo:\n\n1️⃣ Nome do casal:\n(Exemplo: João e Maria)`;
+                        await this.sendMessage(remoteJid, welcomeWedding);
+                        this.userStates[remoteJid] = {
+                            type: 'WEDDING',
+                            step: 'WAITING_COUPLE_NAME',
+                            data: {},
+                            lastInteraction: Date.now(),
+                            notifiedInactivity: false
+                        };
+                        return;
+                    }
 
                     // Se for um novo membro OU se for uma palavra-chave de QR Code (ex: "quero me cadastrar", "visita", "culto")
                     const isNewMemberAction = lowerText.includes('cadastrar') || lowerText.includes('visita') || lowerText.includes('culto') || lowerText.includes('paz paraipaba');
@@ -661,9 +761,21 @@ export class WhatsAppService {
     }
 
     async sendMessage(to: string, text: string) {
-        if (!this.sock) return;
-        let jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
-        await this.sock.sendMessage(jid, { text });
+        if (!this.sock || !this.isConnected) {
+            console.error(`❌ Falha ao enviar mensagem para ${to}: Socket desconectado.`);
+            return;
+        }
+        try {
+            let jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
+            await this.sock.sendMessage(jid, { text });
+            this.lastMessageAt = Date.now();
+        } catch (e: any) {
+            console.error(`❌ Erro ao enviar mensagem para ${to}:`, e.message);
+            if (e.message.includes('Closed')) {
+                this.isConnected = false;
+                this.scheduleReconnect(5000);
+            }
+        }
     }
 
     async sendGeneratedImageMessage(to: string, prompt: string, caption?: string) {
