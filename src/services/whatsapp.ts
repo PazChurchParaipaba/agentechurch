@@ -297,6 +297,17 @@ export class WhatsAppService {
                     const mentionedJid = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                     const isMentioned = mentionedJid.includes(botJid);
 
+                    // Comando /kids: manda o link do Paz Kids (só no grupo)
+                    if (lowerText.trim() === '/kids') {
+                        let baseUrl = process.env.SELF_URL ? process.env.SELF_URL.trim().replace(/\/$/, '') : 'http://localhost:3000';
+                        if (baseUrl !== 'http://localhost:3000' && !baseUrl.startsWith('http')) {
+                            baseUrl = `https://${baseUrl}`;
+                        }
+                        const kidsUrl = `${baseUrl}/pazkids`;
+                        await this.sendMessage(remoteJid, `🧒 *Paz Kids – Check-in Infantil*\n\nAcesse o painel de líderes pelo link abaixo:\n\n🔗 ${kidsUrl}\n\n_Cadastre as crianças e gerencie as saídas com QR Code!_ 🙏`);
+                        return;
+                    }
+
                     // Só processa se for menção ou comando com "!"
                     if (!isMentioned && !lowerText.startsWith('!')) {
                         return; // Ignora a mensagem no grupo se não for para o bot

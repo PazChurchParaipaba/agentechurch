@@ -83,32 +83,21 @@ export function initScheduler() {
     }, { timezone: "America/Sao_Paulo" });
 
     // Tarefa 3: Devocional Diário (Melhoria 6) - Todo dia às 06:30
+    // Enviado SOMENTE para o grupo principal da igreja (CHURCH_GROUP_ID)
     cron.schedule('30 6 * * *', async () => {
-        console.log('📖 Iniciando envio de devocional diário para todos os grupos...');
+        console.log('📖 Iniciando envio de devocional diário para o grupo principal...');
+
+        if (!CHURCH_GROUP_ID) {
+            console.log('⚠️ WHATSAPP_GROUP_ID não configurado — devocional não enviado.');
+            return;
+        }
+
+        if (!waService.isConnected) {
+            console.log('⚠️ WhatsApp desconectado — devocional não enviado.');
+            return;
+        }
 
         try {
-            // 1. Obter a lista de todos os grupos em que o bot está
-            let groups: { id: string, subject: string }[] = [];
-            if (waService.sock && waService.isConnected) {
-                try {
-                    const allGroups = await waService.sock.groupFetchAllParticipating();
-                    groups = Object.values(allGroups).map((g: any) => ({
-                        id: g.id,
-                        subject: g.subject
-                    }));
-                } catch (groupError) {
-                    console.error('Erro ao buscar grupos (socket pode estar instável):', groupError);
-                }
-            }
-
-            if (groups.length === 0) {
-                console.log('Nenhum grupo encontrado para enviar o devocional.');
-                return;
-            }
-            
-            console.log(`🕊️ Preparando devocional para ${groups.length} grupos.`);
-
-            // 2. Gerar UMA mensagem de devocional para ser a mesma para todos
             const themes = ["Graça e Misericórdia", "Fé em tempos difíceis", "O poder da oração", "Amor ao próximo", "Gratidão", "Sabedoria de Provérbios", "A alegria do Senhor", "Caminhando com o Espírito Santo", "Vencendo o medo", "Propósito de vida em Cristo"];
             const randomTheme = themes[Math.floor(Math.random() * themes.length)];
             const todayStr = new Date().toLocaleDateString('pt-BR');
@@ -128,19 +117,8 @@ export function initScheduler() {
 
             const finalMessage = `☀️ *BOM DIA FAMÍLIA PAZ!* ☀️\n_Devocional ${todayStr}_\n\n${devocional}\n\nTenha um dia vitorioso em nome de Jesus! 🙏🔥`;
 
-            // 3. Enviar a mensagem para cada grupo com um pequeno delay
-            for (const group of groups) {
-                try {
-                    await waService.sendMessage(group.id, finalMessage);
-                    console.log(`Devocional enviado para o grupo: ${group.subject}`);
-                    // Adiciona um delay de 1 a 3 segundos para não sobrecarregar
-                    await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
-                } catch (err) {
-                    console.error(`Erro ao enviar devocional para o grupo ${group.subject} (${group.id}):`, err);
-                }
-            }
-
-            console.log('✅ Envio de devocionais concluído.');
+            await waService.sendMessage(CHURCH_GROUP_ID, finalMessage);
+            console.log(`✅ Devocional enviado para o grupo principal (${CHURCH_GROUP_ID}).`);
 
         } catch (e) {
             console.error("Erro geral no job de devocional diário:", e);

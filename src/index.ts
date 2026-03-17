@@ -347,6 +347,55 @@ app.get('/voz', (req, res) => {
     res.sendFile('voz.html', { root: 'public' });
 });
 
+app.get('/pazkids', (req, res) => {
+    res.sendFile('pazkids.html', { root: 'public' });
+});
+
+// ─── PAZ KIDS: Enviar cartão de identificação via WhatsApp ───────────────────
+app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
+    const { phone, imageBase64, childName, number, parentName } = req.body;
+
+    if (!phone || !imageBase64) {
+        return res.status(400).json({ error: 'phone e imageBase64 são obrigatórios.' });
+    }
+
+    if (!waService.isConnected) {
+        return res.status(503).json({ error: 'WhatsApp não está conectado no momento. Tente novamente em instantes.' });
+    }
+
+    try {
+        // Remove o prefixo data URI se vier do browser (data:image/png;base64,...)
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const BufCls = (globalThis as any).Buffer;
+        const buffer = BufCls.from(base64Data, 'base64');
+
+        // Formata o JID do WhatsApp
+        const cleanPhone = phone.replace(/\D/g, '');
+        const jid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
+
+        const caption = 
+            `🧒 *Paz Kids – Cartão de Retirada*\n\n` +
+            `*Criança:* ${childName}\n` +
+            `*Número:* ${number}\n` +
+            (parentName ? `*Responsável:* ${parentName}\n` : '') +
+            `\n📌 *IMPORTANTE:* Guarde este QR Code!\nNa saída, mostre-o para o líder escanear — é assim que sua criança será liberada com segurança. 🙏\n\n` +
+            `_Paz Church Paraipaba_`;
+
+        await waService.sock?.sendMessage(jid, {
+            image: buffer,
+            caption,
+            mimetype: 'image/png'
+        });
+
+        console.log(`📋 Cartão Paz Kids enviado para ${jid} — Criança: ${childName} (#${number})`);
+        res.json({ success: true, message: `Cartão enviado para ${cleanPhone}` });
+
+    } catch (error: any) {
+        console.error('Erro ao enviar cartão Paz Kids:', error);
+        res.status(500).json({ error: `Falha ao enviar: ${error.message}` });
+    }
+});
+
 // Correção 10: Variável currentQR removida (código morto)
 
 
