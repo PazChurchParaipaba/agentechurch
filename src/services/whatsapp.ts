@@ -815,9 +815,34 @@ export class WhatsAppService {
         });
     }
 
+    /**
+     * Resolve o JID correto de um número usando sock.onWhatsApp().
+     * Isso garante que contas LID (novo padrão WhatsApp) sejam encontradas.
+     * Fallback: usa @s.whatsapp.net se a consulta falhar.
+     */
+    async resolveJid(phone: string): Promise<string> {
+        if (phone.includes('@')) return phone; // já é um JID
+        const clean = phone.replace(/\D/g, '');
+        // Adiciona DDI 55 p/ números brasileiros se necessário
+        const normalized = (!clean.startsWith('55') && (clean.length === 10 || clean.length === 11))
+            ? '55' + clean : clean;
+        try {
+            if (this.sock) {
+                const [result] = await this.sock.onWhatsApp(normalized);
+                if (result?.exists && result.jid) {
+                    console.log(`🔍 JID resolvido: ${normalized} → ${result.jid}`);
+                    return result.jid;
+                }
+            }
+        } catch (e) {
+            console.warn(`⚠️ Falha ao resolver JID para ${normalized}, usando fallback.`);
+        }
+        return `${normalized}@s.whatsapp.net`;
+    }
+
     async sendImage(to: string, content: string | Buffer, caption?: string) {
         if (!this.sock) return;
-        const jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
+        const jid = await this.resolveJid(to);
         const imageContent = typeof content === 'string' ? { url: content } : content;
         await this.sock.sendMessage(jid, { image: imageContent, caption });
     }
