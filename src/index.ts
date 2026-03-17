@@ -17,7 +17,7 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 app.use(cors());
 
 // Middleware de Segurança (CSP) - Ajustado para desenvolvimento
@@ -364,7 +364,9 @@ app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
     }
 
     try {
-        // Remove o prefixo data URI se vier do browser (data:image/png;base64,...)
+        // Remove o prefixo data URI se vier do browser (data:image/png;base64,... ou data:image/jpeg;base64,...)
+        const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
         const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
         const BufCls = (globalThis as any).Buffer;
         const buffer = BufCls.from(base64Data, 'base64');
@@ -384,7 +386,7 @@ app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
         await waService.sock?.sendMessage(jid, {
             image: buffer,
             caption,
-            mimetype: 'image/png'
+            mimetype: mimeType
         });
 
         console.log(`📋 Cartão Paz Kids enviado para ${jid} — Criança: ${childName} (#${number})`);

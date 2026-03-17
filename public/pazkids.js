@@ -161,124 +161,99 @@ function showQrCode(url,number,name){
 // O QR Code do cartão contém a URL do filho → o scanner do líder lê na saída
 // ─────────────────────────────────────────────────
 async function sendCardToParent(child){
+  // Canvas menor (560x336) + JPEG para reduzir payload (~100kb vs ~800kb PNG)
   const canvas=document.createElement('canvas');
-  canvas.width=700;canvas.height=420;
+  canvas.width=560;canvas.height=336;
   const ctx=canvas.getContext('2d');
 
   // Fundo branco
   ctx.fillStyle='#ffffff';
-  ctx.fillRect(0,0,700,420);
+  ctx.fillRect(0,0,560,336);
 
   // Header gradiente
-  const grad=ctx.createLinearGradient(0,0,700,0);
+  const grad=ctx.createLinearGradient(0,0,560,0);
   grad.addColorStop(0,'#6366f1');
   grad.addColorStop(1,'#7c3aed');
   ctx.fillStyle=grad;
-  ctx.fillRect(0,0,700,100);
+  ctx.fillRect(0,0,560,80);
 
-  // Titulo no header
-  ctx.font='bold 30px Arial';
-  ctx.fillStyle='#ffffff';
-  ctx.fillText('PAZ KIDS', 30, 50);
-  ctx.font='15px Arial';
-  ctx.fillStyle='rgba(255,255,255,0.8)';
-  ctx.fillText('Paz Church Paraipaba - Cartao de Retirada', 30, 76);
-
-  // Numero (circulo grande)
-  ctx.beginPath();
-  ctx.arc(110,230,72,0,Math.PI*2);
-  const circGrad=ctx.createRadialGradient(110,230,0,110,230,72);
-  circGrad.addColorStop(0,'#818cf8');
-  circGrad.addColorStop(1,'#6366f1');
-  ctx.fillStyle=circGrad;
-  ctx.fill();
-  ctx.strokeStyle='rgba(255,255,255,0.3)';
-  ctx.lineWidth=3;
-  ctx.stroke();
-  ctx.font='bold 56px Arial';
-  ctx.fillStyle='#ffffff';
-  ctx.textAlign='center';
-  ctx.fillText(child.number, 110, 248);
-  ctx.textAlign='left';
-
-  // Label "Numero"
-  ctx.font='12px Arial';
-  ctx.fillStyle='#94a3b8';
-  ctx.textAlign='center';
-  ctx.fillText('NUMERO', 110, 318);
-  ctx.textAlign='left';
-
-  // Linha divisora
-  ctx.strokeStyle='#e2e8f0';
-  ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.moveTo(210,115);ctx.lineTo(210,335);
-  ctx.stroke();
-
-  // Info da crianca
   ctx.font='bold 24px Arial';
-  ctx.fillStyle='#1e293b';
-  ctx.fillText(child.child_name||'Sem nome', 230, 160);
+  ctx.fillStyle='#ffffff';
+  ctx.fillText('PAZ KIDS', 24, 38);
+  ctx.font='12px Arial';
+  ctx.fillStyle='rgba(255,255,255,0.8)';
+  ctx.fillText('Paz Church Paraipaba - Cartao de Retirada', 24, 60);
 
-  ctx.font='16px Arial';
-  ctx.fillStyle='#64748b';
-  ctx.fillText('Responsavel: '+(child.parent_name||'Nao informado'), 230, 192);
+  // Circulo com numero
+  ctx.beginPath();
+  ctx.arc(88,184,58,0,Math.PI*2);
+  const cg=ctx.createRadialGradient(88,184,0,88,184,58);
+  cg.addColorStop(0,'#818cf8');cg.addColorStop(1,'#6366f1');
+  ctx.fillStyle=cg;ctx.fill();
+  ctx.font='bold 42px Arial';
+  ctx.fillStyle='#ffffff';ctx.textAlign='center';
+  ctx.fillText(child.number,88,198);
+  ctx.font='10px Arial';ctx.fillStyle='#94a3b8';
+  ctx.fillText('NUMERO',88,252);ctx.textAlign='left';
+
+  // Divisor
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(168,90);ctx.lineTo(168,268);ctx.stroke();
+
+  // Info
+  ctx.font='bold 18px Arial';ctx.fillStyle='#1e293b';
+  ctx.fillText(child.child_name||'Sem nome',184,128);
+  ctx.font='13px Arial';ctx.fillStyle='#64748b';
+  ctx.fillText('Resp.: '+(child.parent_name||'Nao informado'),184,152);
 
   if(child.age_group){
-    const ageMap={bebe:'Bebe (0-2)',maternal:'Maternal (3-4)',jardim:'Jardim (5-6)',primario:'Primario (7-9)',junior:'Junior (10-12)'};
-    ctx.font='bold 13px Arial';
-    const ageBg=ctx.measureText(ageMap[child.age_group]||child.age_group).width+20;
+    const ageMap={bebe:'Bebe',maternal:'Maternal',jardim:'Jardim',primario:'Primario',junior:'Junior'};
+    const lbl=ageMap[child.age_group]||child.age_group;
+    const w=ctx.measureText(lbl).width+16;
     ctx.fillStyle='#e0e7ff';
-    ctx.roundRect?ctx.roundRect(230,205,ageBg,24,12):ctx.fillRect(230,205,ageBg,24);
-    ctx.fill();
-    ctx.fillStyle='#4338ca';
-    ctx.fillText(ageMap[child.age_group]||child.age_group, 240, 221);
+    ctx.roundRect?ctx.roundRect(184,162,w,20,8):ctx.fillRect(184,162,w,20);
+    ctx.fill();ctx.fillStyle='#4338ca';ctx.font='bold 11px Arial';
+    ctx.fillText(lbl,192,176);
   }
 
   if(child.checkin_at){
-    ctx.font='14px Arial';
-    ctx.fillStyle='#94a3b8';
-    ctx.fillText('Check-in: '+new Date(child.checkin_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), 230, 250);
+    ctx.font='12px Arial';ctx.fillStyle='#94a3b8';
+    ctx.fillText('Check-in: '+new Date(child.checkin_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),184,200);
   }
 
-  // Instrucao
-  ctx.font='bold 13px Arial';
-  ctx.fillStyle='#475569';
-  ctx.fillText('Apresente este QR Code na saida!', 230, 285);
-  ctx.fillStyle='#94a3b8';
-  ctx.font='12px Arial';
-  ctx.fillText('O lider vai escanear para liberar a crianca.', 230, 305);
+  ctx.font='bold 11px Arial';ctx.fillStyle='#475569';
+  ctx.fillText('Apresente este QR Code na saida!',184,228);
+  ctx.font='11px Arial';ctx.fillStyle='#94a3b8';
+  ctx.fillText('O lider vai escanear para liberar a crianca.',184,245);
 
-  // QR Code com URL do filho (para o scanner do lider ler na saída)
+  // QR Code (120x120)
   const qrCanvas=document.createElement('canvas');
   const qrUrl=location.origin+'/pazkids?number='+child.number;
   await new Promise((res,rej)=>{
-    QRCode.toCanvas(qrCanvas,qrUrl,{width:150,margin:1,color:{dark:'#6366f1',light:'#ffffff'}},e=>e?rej(e):res());
+    QRCode.toCanvas(qrCanvas,qrUrl,{width:120,margin:1,color:{dark:'#6366f1',light:'#ffffff'}},e=>e?rej(e):res());
   });
   ctx.fillStyle='#f5f3ff';
-  ctx.fillRect(517,107,160,160);
-  ctx.drawImage(qrCanvas,522,112,150,150);
-  ctx.font='11px Arial';
-  ctx.fillStyle='#94a3b8';
-  ctx.textAlign='center';
-  ctx.fillText('Escaneie na saida', 597, 282);
-  ctx.textAlign='left';
+  ctx.fillRect(416,86,128,128);
+  ctx.drawImage(qrCanvas,420,90,120,120);
+  ctx.font='10px Arial';ctx.fillStyle='#94a3b8';ctx.textAlign='center';
+  ctx.fillText('Escaneie na saida',480,225);ctx.textAlign='left';
 
   // Footer
   ctx.fillStyle='#f8fafc';
-  ctx.fillRect(0,345,700,75);
+  ctx.fillRect(0,276,560,60);
   ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(0,345);ctx.lineTo(700,345);ctx.stroke();
-  ctx.font='12px Arial';ctx.fillStyle='#94a3b8';ctx.textAlign='center';
-  ctx.fillText('Deus abencoe sua familia! -- Paz Church Paraipaba', 350,372);
-  ctx.fillText('Em caso de emergencia procure um lider do Paz Kids', 350,395);
+  ctx.beginPath();ctx.moveTo(0,276);ctx.lineTo(560,276);ctx.stroke();
+  ctx.font='11px Arial';ctx.fillStyle='#94a3b8';ctx.textAlign='center';
+  ctx.fillText('Deus abencoe sua familia! -- Paz Church Paraipaba',280,298);
+  ctx.fillText('Em caso de emergencia procure um lider do Paz Kids',280,316);
   ctx.textAlign='left';
 
   // Borda
-  ctx.strokeStyle='#6366f1';ctx.lineWidth=4;
-  ctx.strokeRect(2,2,696,416);
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=3;
+  ctx.strokeRect(2,2,556,332);
 
-  const imageBase64=canvas.toDataURL('image/png');
+  // JPEG (muito mais leve que PNG)
+  const imageBase64=canvas.toDataURL('image/jpeg',0.82);
   const apiBase=getApiBase();
 
   const resp=await fetch(apiBase+'/pazkids/send-card',{
@@ -293,6 +268,10 @@ async function sendCardToParent(child){
     })
   });
 
+  if(!resp.ok){
+    const txt=await resp.text();
+    throw new Error('Servidor retornou '+resp.status+': '+(txt.includes('<')?'Erro interno no servidor':txt));
+  }
   const result=await resp.json();
   if(!result.success) throw new Error(result.error||'Erro desconhecido no servidor');
   return result;
