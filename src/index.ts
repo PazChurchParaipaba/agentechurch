@@ -372,7 +372,11 @@ app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
         const buffer = BufCls.from(base64Data, 'base64');
 
         // Formata o JID do WhatsApp
-        const cleanPhone = phone.replace(/\D/g, '');
+        // Garante DDI 55 para números brasileiros (10-11 dígitos sem DDI)
+        let cleanPhone = phone.replace(/\D/g, '');
+        if (!cleanPhone.startsWith('55') && (cleanPhone.length === 10 || cleanPhone.length === 11)) {
+            cleanPhone = '55' + cleanPhone;
+        }
         const jid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
 
         const caption = 
@@ -383,13 +387,19 @@ app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
             `\n📌 *IMPORTANTE:* Guarde este QR Code!\nNa saída, mostre-o para o líder escanear — é assim que sua criança será liberada com segurança. 🙏\n\n` +
             `_Paz Church Paraipaba_`;
 
-        await waService.sock?.sendMessage(jid, {
+        // Garante que o socket existe e está ativo antes de enviar
+        if (!waService.sock) {
+            throw new Error('Socket WhatsApp não inicializado. Aguarde a conexão e tente novamente.');
+        }
+
+        console.log(`📤 Enviando cartão Paz Kids para ${jid} — Criança: ${childName} (#${number})`);
+        await waService.sock.sendMessage(jid, {
             image: buffer,
             caption,
             mimetype: mimeType
         });
 
-        console.log(`📋 Cartão Paz Kids enviado para ${jid} — Criança: ${childName} (#${number})`);
+        console.log(`✅ Cartão Paz Kids CONFIRMADO para ${jid} — Criança: ${childName} (#${number})`);
         res.json({ success: true, message: `Cartão enviado para ${cleanPhone}` });
 
     } catch (error: any) {
