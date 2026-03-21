@@ -143,8 +143,7 @@ export class WhatsAppService {
 
         try {
             console.log('📡 Iniciando processo de conex\u00e3o com WhatsApp...');
-            // Utilizamos uma vers\u00e3o hardcoded 100% est\u00e1vel ao inv\u00e9s da latest que pode causar "Stream Errored"
-            const version: [number, number, number] = [2, 3000, 1015901307];
+            const { version } = await fetchLatestBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState(this.authStateStr);
             console.log('🔗 Estabelecendo socket (Vers\u00e3o:', version, ')');
 
@@ -158,6 +157,7 @@ export class WhatsAppService {
                 auth: state,
                 version,
                 browser: Browsers.macOS('Chrome'), // Assinatura est\u00e1vel conhecida
+                syncFullHistory: false, // Fundamental para n\u00e3o travar no primeiro sync (evita 515)
                 markOnlineOnConnect: false, // Pode causar 515 ou bloqueios se for imediato
                 keepAliveIntervalMs: 30000, 
                 connectTimeoutMs: 60000,
