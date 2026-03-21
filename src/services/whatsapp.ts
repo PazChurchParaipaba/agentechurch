@@ -156,16 +156,14 @@ export class WhatsAppService {
                 logger: pino({ level: 'silent' }), 
                 auth: state,
                 version,
-                browser: Browsers.macOS('Chrome'), // Browsers.ubuntu might be flagged as bot
+                browser: ['AgenteIgreja', 'Chrome', '10.0'], // Usar string gen\u00e9rica customizada para evitar bloqueios
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 30000, // Reduced for faster detection
-                connectTimeoutMs: 60000,
-                defaultQueryTimeoutMs: 60000, // Added timeout for queries
-                retryRequestDelayMs: 5000,
                 generateHighQualityLinkPreview: false,
-                patchMessageBeforeSending: (message) => {
-                    const requiresPatch = !!(
+                getMessage: async (key) => {
+                    return { conversation: 'Mensagem do sistema' };
+                },
+                patchMessageBeforeSending: (message) => {                    const requiresPatch = !!(
                         message.buttonsMessage ||
                         message.templateMessage ||
                         message.listMessage
