@@ -97,6 +97,35 @@ export class WhatsAppService {
         }, backoffMs);
     }
 
+    public async forceReset() {
+        console.log('⚠️ Forçando reset geral de conex\u00e3o...');
+        this.connecting = false;
+        this.isConnected = false;
+        this.qrCodeString = null;
+        this.qrCodeDataUrl = null;
+        this.retryCount = 0;
+        this.isReconnecting = false;
+        
+        if (this.connectionWatchdog) {
+            clearTimeout(this.connectionWatchdog);
+            this.connectionWatchdog = null;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
+        if (this.sock) {
+            try { this.sock.logout(); } catch(e) {}
+            try { this.sock.end(undefined); } catch(e) {}
+            this.sock = undefined;
+        }
+
+        const authPath = path.resolve(this.authStateStr);
+        if (fs.existsSync(authPath)) {
+            try { fs.rmSync(authPath, { recursive: true, force: true }); } catch(e) {}
+        }
+    }
 
     async connectToWhatsApp() {
         if (this.connecting || this.isConnected) return;
@@ -107,7 +136,8 @@ export class WhatsAppService {
         this.connectionWatchdog = setTimeout(() => {
             if (this.connecting && !this.isConnected && !this.qrCodeDataUrl) {
                 console.warn('⚠️ Watchdog: A conex\u00e3o est\u00e1 demorando demais. Resetando flag de connecting...');
-                this.connecting = false;
+                this.forceReset(); // Agora chamamos o force reset para garantir a limpeza pesada
+                this.scheduleReconnect(5000);
             }
         }, 90000);
 

@@ -53,27 +53,20 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
 // Rota de Health Check
 app.get('/', (req, res) => res.send('Agente Igreja - Paz Church Paraipaba está vivo! 🚀'));
 
-// Rota de Reconexão Manual (Admin)
+// Rota de Reconex\u00e3o Manual (Admin)
 app.post('/api/reconnect', authMiddleware, async (req: Request, res: Response) => {
-    console.log('🔄 Reconexão manual solicitada via API...');
+    console.log('🔄 Reconex\u00e3o manual solicitada via API...');
+    await waService.forceReset();
     await waService.connectToWhatsApp();
-    res.json({ success: true, message: 'Tentativa de reconexão iniciada.' });
+    res.json({ success: true, message: 'Tentativa de reconex\u00e3o iniciada.' });
 });
 
-// Rota para Limpar Sessão (Admin) - Útil se a conexão travar
+// Rota para Limpar Sess\u00e3o (Admin) - \u00datil se a conex\u00e3o travar
 app.post('/api/clear-session', authMiddleware, async (req: Request, res: Response) => {
-    console.log('🧹 Limpeza de sessão solicitada via API...');
-    const authPath = path.resolve('auth_session_v2');
-    if (fs.existsSync(authPath)) {
-        try {
-            fs.rmSync(authPath, { recursive: true, force: true });
-            console.log('✅ Pasta de sessão removida.');
-        } catch (e) {
-            console.error('❌ Erro ao remover pasta de sessão:', e);
-        }
-    }
+    console.log('🧹 Limpeza de sess\u00e3o solicitada via API...');
+    await waService.forceReset();
     await waService.connectToWhatsApp();
-    res.json({ success: true, message: 'Sessão limpa e tentativa de reconexão iniciada.' });
+    res.json({ success: true, message: 'Sess\u00e3o limpa e tentativa de reconex\u00e3o iniciada.' });
 });
 
 // --- API Endpoints ---
@@ -137,14 +130,6 @@ app.get('/api/dashboard-stats', async (req: Request, res: Response) => {
     }
 });
 
-// Status do WhatsApp & QR Code (Facilita p/ Koyeb)
-app.get('/api/whatsapp-status', (req: Request, res: Response) => {
-    res.json({
-        connected: waService.isConnected,
-        hasQr: !!waService.qrCodeString,
-        lastInteraction: new Date(waService.lastMessageAt).toLocaleString()
-    });
-});
 // Rota principal para ver o QR Code no navegador (usada pelo Admin)
 app.get('/qr', (req, res) => {
     res.send(`
