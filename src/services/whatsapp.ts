@@ -128,65 +128,38 @@ export class WhatsAppService {
     }
 
     async connectToWhatsApp() {
-        if (this.connecting || this.isConnected) return;
-        this.connecting = true;
-        
-        // Watchdog de conex\u00e3o: Se n\u00e3o conectar ou gerar QR em 90s, reseta o flag
-        if (this.connectionWatchdog) clearTimeout(this.connectionWatchdog);
-        this.connectionWatchdog = setTimeout(() => {
-            if (this.connecting && !this.isConnected && !this.qrCodeDataUrl) {
-                console.warn('⚠️ Watchdog: A conex\u00e3o est\u00e1 demorando demais. Resetando flag de connecting...');
-                this.forceReset(); // Agora chamamos o force reset para garantir a limpeza pesada
-                this.scheduleReconnect(5000);
-            }
-        }, 90000);
-
         try {
-            console.log('📡 Iniciando processo de conex\u00e3o com WhatsApp...');
-            const { version } = await fetchLatestBaileysVersion();
+            let version;
+            try {
+                const latest = await fetchLatestBaileysVersion();
+                version = latest.version;
+                console.log(`📡 Usando Baileys v${version.join('.')}`);
+            } catch (e) {
+                console.warn('⚠️ Erro ao buscar vers\u00e3o do WhatsApp, usando fallback...');
+                version = [2, 3000, 1015901307]; // Fallback gen\u00e9rico est\u00e1vel
+            }
+
             const { state, saveCreds } = await useMultiFileAuthState(this.authStateStr);
-            console.log('🔗 Estabelecendo socket (Vers\u00e3o:', version, ')');
 
             if (this.sock) {
-                try { this.sock.end(undefined); } catch (e) { }
+                try { 
+                    this.sock.ev.removeAllListeners('connection.update');
+                    this.sock.ev.removeAllListeners('creds.update');
+                    this.sock.ev.removeAllListeners('messages.upsert');
+                    this.sock.end(undefined); 
+                } catch (e) { }
                 this.sock = undefined;
             }
 
             this.sock = makeWASocket({
-                logger: pino({ level: 'silent' }), 
+                logger: pino({ level: 'info' }), // Ativado info para facilitar debug do usu\u00e1rio
                 auth: state,
                 version,
-                browser: Browsers.macOS('Chrome'), // Assinatura est\u00e1vel conhecida
-                syncFullHistory: false, // Fundamental para n\u00e3o travar no primeiro sync (evita 515)
-                markOnlineOnConnect: false, // Pode causar 515 ou bloqueios se for imediato
-                keepAliveIntervalMs: 30000, 
-                connectTimeoutMs: 60000,
+                browser: Browsers.ubuntu('Chrome'), // Melhora a compatibilidade e evita quedas
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
+                keepAliveIntervalMs: 30000,
                 defaultQueryTimeoutMs: 60000,
-                retryRequestDelayMs: 5000,
-                generateHighQualityLinkPreview: false,
-                getMessage: async (key) => {
-                    return { conversation: 'Mensagem do sistema' };
-                },
-                patchMessageBeforeSending: (message) => {                    const requiresPatch = !!(
-                        message.buttonsMessage ||
-                        message.templateMessage ||
-                        message.listMessage
-                    );
-                    if (requiresPatch) {
-                        return {
-                            viewOnceMessage: {
-                                message: {
-                                    messageContextInfo: {
-                                        deviceListMetadata: {},
-                                        deviceListMetadataVersion: 2
-                                    },
-                                    ...message
-                                }
-                            }
-                        };
-                    }
-                    return message;
-                }
             });
 
             this.sock.ev.on('connection.update', async (update: any) => {
@@ -195,46 +168,41 @@ export class WhatsAppService {
                 if (qr) {
                     this.qrCodeString = qr;
                     this.qrCodeDataUrl = await QRCode.toDataURL(qr);
-                    if (this.connectionWatchdog) {
-                        clearTimeout(this.connectionWatchdog);
-                        this.connectionWatchdog = null;
-                    }
-                    console.log('📢 Novo QR gerado.');
+                    console.log('💠 Novo QR Code gerado.');
+                    if (qrcodeTerminal) qrcodeTerminal.generate(qr, { small: true });
                 }
 
                 if (connection === 'close') {
                     this.isConnected = false;
                     const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                    const reason = (lastDisconnect?.error as Boom)?.message || 'Erro desconhecido';
-                    
-                    console.log(`🔌 Conexão encerrada. Código: ${statusCode}, Razão: ${reason}`);
-
                     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-                    if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-                        console.log('🚪 Deslogado ou Não Autorizado. Limpando credenciais...');
+                    console.log(`❌ Conex\u00e3o fechada. Motivo: ${statusCode || 'Desconhecido'}`);
+
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        console.log('🚪 Sess\u00e3o encerrada. Limpando dados de autentica\u00e7\u00e3o...');
                         const authPath = path.resolve(this.authStateStr);
                         if (fs.existsSync(authPath)) {
-                            try { fs.rmSync(authPath, { recursive: true, force: true }); } catch(e) {}
+                            fs.rmSync(authPath, { recursive: true, force: true });
                         }
-                        this.retryCount = 0;
                         this.qrCodeString = null;
-                        this.scheduleReconnect(5000);
-                    } else if (statusCode === 515 || statusCode === 428 || reason.includes('Stream Errored')) {
-                        console.log('⚠️ Erro de stream ou conexão terminada. Reiniciando socket...');
-                        this.scheduleReconnect(5000);
-                    } else {
-                        console.log(`🔄 Tentando reconectar em breve... Motivo: ${reason}`);
+                        this.qrCodeDataUrl = null;
+                        this.retryCount = 0;
+                    }
+
+                    if (shouldReconnect) {
                         this.retryCount++;
-                        this.scheduleReconnect(10000);
+                        const delay = Math.min(10000 * Math.pow(1.5, this.retryCount), 60000);
+                        console.log(`⏳ Agendando reconex\u00e3o em ${Math.round(delay/1000)}s... (Tentativa ${this.retryCount})`);
+                        this.scheduleReconnect(delay);
                     }
                 } else if (connection === 'open') {
-                    console.log('✅ Conexão estabelecida com sucesso!');
                     this.isConnected = true;
-                    this.connecting = false;
                     this.qrCodeString = null;
+                    this.qrCodeDataUrl = null;
                     this.retryCount = 0;
                     this.lastMessageAt = Date.now();
+                    console.log('✅ WhatsApp conectado com sucesso! 🚀');
                 }
             });
 
