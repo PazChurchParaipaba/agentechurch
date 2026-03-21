@@ -156,9 +156,13 @@ export class WhatsAppService {
                 logger: pino({ level: 'silent' }), 
                 auth: state,
                 version,
-                browser: ['AgenteIgreja', 'Chrome', '10.0'], // Usar string gen\u00e9rica customizada para evitar bloqueios
+                browser: Browsers.macOS('Chrome'),
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
+                keepAliveIntervalMs: 30000, 
+                connectTimeoutMs: 60000,
+                defaultQueryTimeoutMs: 60000,
+                retryRequestDelayMs: 5000,
                 generateHighQualityLinkPreview: false,
                 getMessage: async (key) => {
                     return { conversation: 'Mensagem do sistema' };
