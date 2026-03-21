@@ -14,6 +14,7 @@ import multer from 'multer';
 export let maintenanceMode = false;
 
 const app = express();
+console.log('🚀 Iniciando Agente Igreja - Paz Church Paraipaba...');
 const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 3000;
 

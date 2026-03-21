@@ -93,10 +93,15 @@ export class WhatsAppService {
         }, backoffMs);
     }
 
+    private connecting: boolean = false;
+
     async connectToWhatsApp() {
+        if (this.connecting || this.isConnected) return;
+        this.connecting = true;
         try {
             const { version } = await fetchLatestBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState(this.authStateStr);
+            console.log('🔗 Estabelecendo conexão com WhatsApp (Versão:', version, ')');
 
             if (this.sock) {
                 try { this.sock.end(undefined); } catch (e) { }
@@ -175,6 +180,7 @@ export class WhatsAppService {
                 } else if (connection === 'open') {
                     console.log('✅ Conexão estabelecida com sucesso!');
                     this.isConnected = true;
+                    this.connecting = false;
                     this.qrCodeString = null;
                     this.retryCount = 0;
                     this.lastMessageAt = Date.now();
