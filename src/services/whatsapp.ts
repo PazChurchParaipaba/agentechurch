@@ -24,7 +24,7 @@ export class WhatsAppService {
     private retryCount = 0;
     private MAX_RETRIES = 999;
     private reconnectTimer: NodeJS.Timeout | null = null;
-    private lastMessageAt: number = Date.now();
+    public lastMessageAt: number = Date.now();
     private isReconnecting: boolean = false;
     private watchdogTimer: NodeJS.Timeout | null = null;
     private inactivityTimer: NodeJS.Timeout | null = null;

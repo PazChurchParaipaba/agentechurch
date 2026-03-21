@@ -137,6 +137,32 @@ app.get('/api/dashboard-stats', async (req: Request, res: Response) => {
     }
 });
 
+// Status do WhatsApp & QR Code (Facilita p/ Koyeb)
+app.get('/api/whatsapp-status', (req: Request, res: Response) => {
+    res.json({
+        connected: waService.isConnected,
+        hasQr: !!waService.qrCodeString,
+        lastInteraction: new Date(waService.lastMessageAt).toLocaleString()
+    });
+});
+
+app.get('/api/qr', (req: Request, res: Response) => {
+    if (waService.isConnected) return res.send("<h3>Bot j\u00e1 est\u00e1 conectado! \u2705</h3>");
+    if (!waService.qrCodeString) return res.send("<h3>Gerando QR Code... Recarregue em alguns segundos. \u231b</h3>");
+    
+    // Gera uma p\u00e1gina simples com o QR em ASCII ou imagem
+    res.send(`
+        <body style="background: #111; color: #fff; text-align: center; font-family: sans-serif;">
+            <h1>Escaneie p/ o Agente Igreja</h1>
+            <p>O QR Code abaixo expira em breve. Recarregue a p\u00e1gina se n\u00e3o funcionar.</p>
+            <pre style="display: inline-block; background: #fff; color: #000; padding: 20px; font-size: 8px; line-height: 8px; letter-spacing: 0;">
+${waService.qrCodeString}
+            </pre>
+            <script>setTimeout(() => location.reload(), 30000);</script>
+        </body>
+    `);
+});
+
 // Toggle Maintenance Mode
 app.post('/api/maintenance', authMiddleware, (req: Request, res: Response) => {
     const { enabled } = req.body;
