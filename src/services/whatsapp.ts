@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Buffer } from 'buffer';
 import pino from 'pino';
-import qrcode from 'qrcode-terminal';
+import qrcodeTerminal from 'qrcode-terminal';
+import QRCode from 'qrcode';
 import { supabase } from '../config/supabase';
 import { findNearestLife } from '../utils/location';
 import { textToSpeech, limparAudioTemp } from './tts';
@@ -30,6 +31,7 @@ export class WhatsAppService {
     private inactivityTimer: NodeJS.Timeout | null = null;
 
     public qrCodeString: string | null = null;
+    public qrCodeDataUrl: string | null = null;
     public isConnected: boolean = false;
     private LEADER_PHONE = process.env.LEADER_PHONE;
 
@@ -148,6 +150,7 @@ export class WhatsAppService {
                 
                 if (qr) {
                     this.qrCodeString = qr;
+                    this.qrCodeDataUrl = await QRCode.toDataURL(qr);
                     console.log('📢 Novo QR gerado.');
                 }
 

@@ -148,16 +148,16 @@ app.get('/api/whatsapp-status', (req: Request, res: Response) => {
 
 app.get('/api/qr', (req: Request, res: Response) => {
     if (waService.isConnected) return res.send("<h3>Bot j\u00e1 est\u00e1 conectado! \u2705</h3>");
-    if (!waService.qrCodeString) return res.send("<h3>Gerando QR Code... Recarregue em alguns segundos. \u231b</h3>");
+    if (!waService.qrCodeDataUrl) return res.send("<h3>Gerando QR Code... Recarregue em alguns segundos. \u231b</h3>");
     
-    // Gera uma p\u00e1gina simples com o QR em ASCII ou imagem
     res.send(`
-        <body style="background: #111; color: #fff; text-align: center; font-family: sans-serif;">
+        <body style="background: #111; color: #fff; text-align: center; font-family: sans-serif; padding-top: 50px;">
             <h1>Escaneie p/ o Agente Igreja</h1>
             <p>O QR Code abaixo expira em breve. Recarregue a p\u00e1gina se n\u00e3o funcionar.</p>
-            <pre style="display: inline-block; background: #fff; color: #000; padding: 20px; font-size: 8px; line-height: 8px; letter-spacing: 0;">
-${waService.qrCodeString}
-            </pre>
+            <div style="background: #fff; display: inline-block; padding: 20px; border-radius: 20px;">
+                <img src="${waService.qrCodeDataUrl}" style="width: 300px; height: 300px; image-rendering: pixelated;" />
+            </div>
+            <p style="color: #666; margin-top: 20px;">Dica: Se n\u00e3o carregar, verifique os logs do Koyeb.</p>
             <script>setTimeout(() => location.reload(), 30000);</script>
         </body>
     `);
