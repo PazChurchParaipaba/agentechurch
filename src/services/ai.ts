@@ -51,7 +51,12 @@ REGRAS DE COMPORTAMENTO (Siga rigorosamente):
 9. GERAR PDF REAL: Se o usuário pedir para gerar um PDF (relatório, devocional, carta, etc), você DEVE retornar a tag no seguinte formato:
 [GERAR_PDF: Título do Documento | Conteúdo completo do documento aqui]
 
-10. RELATÓRIO DE CÉLULA (VISÃO IA): Sempre que você receber uma FOTO, assuma que pode ser uma reunião de Life Group. CONTE O NÚMERO DE PESSOAS NA FOTO e escreva um "Relatório de Célula" informando quantas pessoas estão presentes e deixe uma mensagem encorajadora para o líder.
+10. RELATÓRIO DE CÉLULA (VISÃO IA): Sempre que você receber uma FOTO, você deve agir como um observador detalhista. Sua principal tarefa é:
+    - CONTAGEM PRECISA: Analise a imagem em "grids" mentais. Conte cada pessoa visível. Se houver crianças no colo ou pessoas parcialmente escondidas, tente identificá-las pelos ombros ou cabeças.
+    - DETALHES DO AMBIENTE: Observe se estão em uma sala de estar, se há comida (comunhão), se há bíblias abertas. 
+    - RESULTADO: No relatório, informe o número EXATO de pessoas encontradas. Se houver dúvida sobre alguém, mencione (ex: "Vi 12 pessoas confirmadas e possivelmente mais uma ao fundo"). 
+    - TOM: Deixe uma mensagem profética e encorajadora para o líder baseada na atmosfera que você percebeu na foto.
+    - IMPORTANTE: Se o usuário perguntar "quantas pessoas tem aqui?", responda de forma analítica e direta primeiro, depois faça o relatório.
 
 --- NOVAS REGRAS DE GERAÇÃO ---
 11. ATENDIMENTO POR VOZ: Se o usuário mencionar que deseja falar por telefone, informe que a Paz Church Paraipaba agora possui uma IA de voz (via Vapi) capaz de atender ligações e conversar em tempo real para aconselhamento e dúvidas rápidas.
@@ -66,14 +71,25 @@ REGRAS DE COMPORTAMENTO (Siga rigorosamente):
 18. LIDANDO COM O IMPREVISTO: Se você não entender uma pergunta, não diga "não entendi". Em vez disso, peça para o usuário reformular de uma maneira diferente ou ofereça opções do que você pode fazer. Ex: "Hmm, não tenho certeza se captei o que você quis dizer. Você poderia explicar de outra forma? Ou talvez você esteja querendo saber sobre X, Y ou Z?".
 `;
 
+// Memória Contextual (Histórico)
+const messageHistory = new Map<string, any[]>();
+const MAX_HISTORY = 10;
+
 export async function getAIResponse(userMessage: string, remoteJid: string, imageBase64?: string, imageMimeType?: string): Promise<string> {
     if (!groq) return "Desculpe, meu cérebro de IA está desligado no momento (Falta API Key).";
 
     try {
         const dynamicPrompt = SYSTEM_PROMPT.replace('[DYNAMIC_FEATURES]', getActiveFeaturesForPrompt());
 
+        // Recuperar ou inicializar histórico
+        if (!messageHistory.has(remoteJid)) {
+            messageHistory.set(remoteJid, []);
+        }
+        const history = messageHistory.get(remoteJid)!;
+
         let messages: any[] = [
-            { role: "system", content: dynamicPrompt }
+            { role: "system", content: dynamicPrompt },
+            ...history
         ];
 
         if (imageBase64 && imageMimeType) {
@@ -95,10 +111,10 @@ export async function getAIResponse(userMessage: string, remoteJid: string, imag
 
         let models: string[] = [];
         if (imageBase64) {
-            console.log("📸 Processando imagem com IA Vision (Llama 4 Scout)...");
-            models = ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-11b-vision-preview"]; // Fallback para o anterior caso o scout mude
+            console.log("📸 Processando imagem com IA Vision (Llama 3.2 11B)...");
+            models = ["llama-3.2-11b-vision-preview"]; 
         } else {
-            models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama3-70b-8192"];
+            models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile"];
         }
 
         let lastError: any;
@@ -114,6 +130,16 @@ export async function getAIResponse(userMessage: string, remoteJid: string, imag
                 const response = chatCompletion.choices[0]?.message?.content;
                 if (response) {
                     console.log(`✅ Resposta via ${model}`);
+                    
+                    // Salvar no histórico (apenas texto)
+                    history.push({ role: "user", content: userMessage });
+                    history.push({ role: "assistant", content: response });
+                    
+                    // Limitar tamanho do histórico
+                    if (history.length > MAX_HISTORY) {
+                        history.splice(0, history.length - MAX_HISTORY);
+                    }
+                    
                     return response;
                 }
             } catch (err: any) {

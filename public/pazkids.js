@@ -575,6 +575,15 @@ async function processScannedQr(data){
       return;
     }
 
+    // Se estiver no Modo Pais, apenas preenche o campo e fecha
+    const isParentSec = document.getElementById('parent-section').style.display !== 'none';
+    if(isParentSec){
+      document.getElementById('parent-number').value = number;
+      closeScanner();
+      loadParentStatus();
+      return;
+    }
+
     const child=childrenData.find(c=>String(c.number)===String(number));
 
     if(!child){

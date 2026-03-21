@@ -210,8 +210,8 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
     }
 
     try {
-        // 1. Buscar todos os membros
-        const { data: members, error } = await supabase.from('members_paraipaba').select('*');
+        // 1. Buscar apenas as colunas necessárias para o disparo
+        const { data: members, error } = await supabase.from('members_paraipaba').select('phone').eq('is_active', true);
         if (error || !members) throw new Error('Erro ao buscar membros');
 
         // 2. Buscar Grupos onde o bot está
@@ -257,6 +257,7 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
                 try {
                     // ID do alvo (pode ser telefone ou grupo)
                     const targetId = target.phone;
+                    if (!targetId) continue;
 
                     if (file) {
                         await waService.sendImage(targetId, file.buffer, message || '');
@@ -264,8 +265,8 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
                         await waService.sendMessage(targetId, message);
                     }
                     count++;
-                } catch (err) {
-                    // console.error(`Falha ao enviar para ${target.phone}:`, err);
+                } catch (err: any) {
+                    console.error(`❌ Falha ao enviar para ${target.phone}:`, err.message);
                 }
             }
             console.log(`Broadcast finalizado. Enviado para ${count} alvos.`);
@@ -347,6 +348,110 @@ app.get('/voz', (req, res) => {
     res.sendFile('voz.html', { root: 'public' });
 });
 
+app.get('/wifi', (req, res) => {
+    res.sendFile('wifi.html', { root: 'public' });
+});
+
+// --- WIFI CAPTIVE PORTAL API ---
+app.get('/api/wifi/search-by-name', async (req: Request, res: Response) => {
+    const { name } = req.query;
+    if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+
+    try {
+        // Busca hibrida por nome (fuzzy) para encontrar possíveis cadastros já feitos (mesmo com LID)
+        const { data, error } = await supabase
+            .from('members_paraipaba')
+            .select('*')
+            .ilike('name', `%${name}%`)
+            .limit(10); // Limita para evitar sobrecarga se o nome for comum
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+            res.json({ found: true, members: data });
+        } else {
+            res.json({ found: false });
+        }
+    } catch (e: any) {
+        console.error('Erro ao buscar membro por nome:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/wifi/check-member', async (req: Request, res: Response) => {
+    let { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'Telefone é obrigatório' });
+
+    // Limpar o telefone para busca (remover DDI 55 se vier com ele, para bater com o cadastro manual)
+    const phoneClean = (phone as string).replace(/\D/g, '');
+    const phoneNoDDI = phoneClean.startsWith('55') ? phoneClean.substring(2) : phoneClean;
+
+    try {
+        // Busca hibrida: tenta o JID/LID e o Telefone de contato real
+        const { data, error } = await supabase
+            .from('members_paraipaba')
+            .select('*')
+            .or(`phone.eq.${phoneClean},phone.ilike.%${phoneNoDDI}%,phone_contact.ilike.%${phoneNoDDI}%`)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+            res.json({ exists: true, member: data });
+        } else {
+            res.json({ exists: false });
+        }
+    } catch (e: any) {
+        console.error('Erro ao buscar membro via wifi:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/wifi/register', async (req: Request, res: Response) => {
+    const { phone, name, birth_date } = req.body;
+    if (!phone || !name) return res.status(400).json({ error: 'Faltam dados obrigatórios' });
+
+    try {
+        // Lógica de "Auto-Reparo": Se já existe alguém com esse NOME e DATA DE NASCIMENTO, 
+        // mas com um ID de whatsapp (LID) diferente, vamos vincular o número real a esse cadastro.
+        const { data: existing } = await supabase
+            .from('members_paraipaba')
+            .select('*')
+            .ilike('name', name)
+            .eq('birth_date', birth_date)
+            .maybeSingle();
+
+        if (existing && existing.phone !== phone) {
+            console.log(`🔧 Auto-Reparo: Vinculando telefone ${phone} ao membro ${name} (ID anterior era ${existing.phone})`);
+            const { data: updated, error: errUpdate } = await supabase
+                .from('members_paraipaba')
+                .update({ phone_contact: phone })
+                .eq('id', existing.id)
+                .select()
+                .single();
+            
+            if (!errUpdate) return res.json({ success: true, member: updated, note: 'Cadastro atualizado' });
+        }
+
+        const { data, error } = await supabase
+            .from('members_paraipaba')
+            .upsert([{ 
+                phone, 
+                phone_contact: phone,
+                name, 
+                birth_date: birth_date || null,
+                notes: 'Cadastrado/Atualizado via Wi-Fi Captive Portal'
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, member: data });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/pazkids', (req, res) => {
     res.sendFile('pazkids.html', { root: 'public' });
 });
@@ -403,7 +508,29 @@ app.post('/api/pazkids/send-card', async (req: Request, res: Response) => {
     }
 });
 
-// Correção 10: Variável currentQR removida (código morto)
+// --- WIFI ATTENDANCE TRACKER ---
+app.post('/api/wifi/pulse', async (req: Request, res: Response) => {
+    const { count } = req.body;
+    if (count === undefined) return res.status(400).json({ error: 'O campo count (quantidade) é obrigatório.' });
+
+    try {
+        const now = new Date();
+        const serviceTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        
+        const { error } = await supabase.from('wifi_attendance').insert([{
+            connection_count: Number(count),
+            service_time: serviceTime
+        }]);
+
+        if (error) throw error;
+        
+        console.log(`📶 Wi-Fi Pulse: ${count} dispositivos conectados às ${serviceTime}`);
+        res.json({ success: true, count, time: serviceTime });
+    } catch (e: any) {
+        console.error('Erro no wifi pulse:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
 
 
 

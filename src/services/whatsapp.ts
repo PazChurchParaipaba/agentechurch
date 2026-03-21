@@ -326,6 +326,11 @@ export class WhatsAppService {
                             return;
                         }
                         if (state.step === 'WAITING_PHONE') {
+                            const isLid = remoteJid.includes('@lid');
+                            if (lowerText.includes('este') && isLid) {
+                                await this.sendMessage(remoteJid, "Hmm, no seu caso o WhatsApp escondeu seu número real por segurança (LID). 🙈\n\nPor favor, *digite seu telefone completo com DDD* manualmente para eu salvar seu cadastro certinho!");
+                                return;
+                            }
                             state.data.phone_contact = lowerText.includes('este') ? phone : textBody!.replace(/\D/g, '');
                             state.step = 'WAITING_EMAIL';
                             await this.sendMessage(remoteJid, "Anotado! Qual seu E-mail? 📧");
@@ -426,7 +431,12 @@ export class WhatsAppService {
                         }
                     }
 
-                    const { data: member } = await supabase.from('members_paraipaba').select('id, name').or(`phone.eq.${phone},phone.eq.55${phone}`).maybeSingle();
+                    // Busca hibrida (JID vs Telefone Real) para garantir que reconhecemos ele mesmo se o ID do whatsapp mudar ou for LID
+                    const { data: member } = await supabase
+                        .from('members_paraipaba')
+                        .select('id, name')
+                        .or(`phone.eq.${phone},phone_contact.ilike.%${phone}%`)
+                        .maybeSingle();
 
                     // Trigger Casamento Coletivo
                     const isWeddingTrigger = lowerText.includes('casamento coletivo') || (lowerText.includes('casamento') && !member);
@@ -443,30 +453,33 @@ export class WhatsAppService {
                         return;
                     }
 
-                    // Se for um novo membro OU se for uma palavra-chave de QR Code (ex: "quero me cadastrar", "visita", "culto")
-                    const isNewMemberAction = lowerText.includes('cadastrar') || lowerText.includes('visita') || lowerText.includes('culto') || lowerText.includes('paz paraipaba');
-
+                    // Fluxo de Cadastro - Humanizado e Otimizado
                     if (!member) {
-                        const welcomeMsgSuffix = isSunday 
-                            ? "Ficamos felizes em te receber no nosso culto. Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?"
-                            : "Ficamos muito felizes com seu contato! Para que possamos te conhecer melhor e te manter informado sobre tudo o que acontece na nossa família, vamos fazer seu cadastro rapidinho?";
+                        const { getAIResponse } = await import('./ai');
+                        
+                        // Prompt p/ IA lidar com o primeiro contato de forma humana
+                        const introPrompt = `Aja como o Agente da Igreja da Paz Church Paraipaba. Recebemos uma mensagem de um NOVO contato (não cadastrado). 
+                        A mensagem dele foi: "${textBody}". 
+                        Hoje é ${dayName}. 
+                        Gere uma saudação extremamente calorosa, empática e humana. NÃO pareça um robô. 
+                        No final, de forma sutil, peça o nome completo dele para que possamos "dar as boas vindas de forma oficial à nossa família".`;
 
-                        const welcomeMsg = `Olá! Que alegria ter você conosco aqui na *Paz Church Paraipaba*! 🕊️✨\n\nSeja muito bem-vindo(a)! ${welcomeMsgSuffix}\n\nPara começar, qual seu *nome completo*?`;
-
+                        const aiGreeting = await getAIResponse(introPrompt, remoteJid);
+                        
                         if (isAudioMessage) {
-                            const { getAIResponse } = await import('./ai');
-                            const greeting = await getAIResponse(`Aja como o Agente da Igreja. Dê as boas vindas a um NOVO visitante que acabou de mandar um áudio. Diga que é uma alegria tê-lo conosco e peça educadamente o nome completo dele para iniciar o cadastro. Hoje é ${dayName}.`, remoteJid);
-                            const audioPath = await textToSpeech(greeting);
+                            const audioPath = await textToSpeech(aiGreeting);
                             if (audioPath) {
                                 await this.sendAudioMessage(remoteJid, audioPath);
                                 limparAudioTemp(audioPath);
-                                await this.sendMessage(remoteJid, "*[Cadastro Iniciado]* Por favor, me diga seu nome completo.");
+                                await this.sendMessage(remoteJid, "*[Agente da Igreja]* " + aiGreeting);
                             } else {
-                                await this.sendMessage(remoteJid, welcomeMsg);
+                                await this.sendMessage(remoteJid, aiGreeting);
                             }
                         } else {
-                            await this.sendMessage(remoteJid, welcomeMsg);
+                            await this.sendMessage(remoteJid, aiGreeting);
                         }
+
+                        // Inicia o estado de registro, mas sem o prompt robótico imediato
                         this.userStates[remoteJid] = {
                             type: 'REGISTRATION',
                             step: 'WAITING_NAME',
@@ -474,11 +487,6 @@ export class WhatsAppService {
                             lastInteraction: Date.now(),
                             notifiedInactivity: false
                         };
-                        return;
-                    } else if (isNewMemberAction && !isAudioMessage) {
-                        // Se já é membro mas mandou a palavra do QR Code (e não é áudio), apenas saúda
-                        const greetingSuffix = isSunday ? " novamente no nosso culto!" : "!";
-                        await this.sendMessage(remoteJid, `Olá, *${member.name}*! Que bom te ver por aqui${greetingSuffix} 🙏✨ Como posso te ajudar hoje?`);
                         return;
                     }
                 }
@@ -624,6 +632,56 @@ export class WhatsAppService {
                     } catch (e) {
                         await this.sendMessage(leaderJid, "Ocorreu um erro durante a análise. A IA pode estar sobrecarregada ou a estrutura de dados de histórico não foi encontrada.");
                         console.error("Erro na análise de intercessão:", e);
+                    }
+                    return;
+                }
+
+                // --- RELATÓRIO DE PRESENÇA (WIFI + CHECK-IN) ---
+                if (lowerText === '!relatorio' || lowerText === '!presenca') {
+                    try {
+                        // 1. Definir data do último culto (Domingo)
+                        const today = new Date();
+                        const lastSunday = new Date(today);
+                        if (today.getDay() !== 0) { // Se não for domingo, pega o anterior
+                            lastSunday.setDate(today.getDate() - today.getDay());
+                        }
+                        const dateStr = lastSunday.toISOString().split('T')[0];
+
+                        // 2. Buscar Pico de Conexões WiFi
+                        const { data: wifiData } = await supabase
+                            .from('wifi_attendance')
+                            .select('connection_count')
+                            .eq('service_date', dateStr);
+                        
+                        const peakWifi = wifiData && wifiData.length > 0 
+                            ? Math.max(...wifiData.map(d => d.connection_count || 0)) 
+                            : 0;
+
+                        // 3. Buscar Check-ins Manuais
+                        const { count: checkinCount } = await supabase
+                            .from('checkin_log')
+                            .select('*', { count: 'exact', head: true })
+                            .filter('checked_in_at', 'gte', `${dateStr}T00:00:00Z`)
+                            .filter('checked_in_at', 'lte', `${dateStr}T23:59:59Z`);
+
+                        // 4. Buscar Paz Kids (atual ou total do dia)
+                        const { count: kidsCount } = await supabase
+                            .from('children')
+                            .select('*', { count: 'exact', head: true });
+
+                        const report = `📊 *RELATÓRIO DE PRESENÇA* 📊\n` +
+                            `📅 *Culto:* ${lastSunday.toLocaleDateString('pt-BR')}\n` +
+                            `⏰ *Horário:* 17h30\n\n` +
+                            `🌐 *Dispositivos no WiFi:* ${peakWifi}\n` +
+                            `👤 *Check-ins Manuais:* ${checkinCount || 0}\n` +
+                            `🧒 *Paz Kids (Check-in):* ${kidsCount || 0}\n\n` +
+                            `📈 *Estimativa Total:* ~${Math.max(peakWifi, (checkinCount || 0) + (kidsCount || 0))} pessoas.\n\n` +
+                            `_Este relatório compara os dados da rede com os check-ins oficiais._ 🕊️`;
+
+                        await this.sendMessage(remoteJid, report);
+                    } catch (e: any) {
+                        console.error('Erro ao gerar relatório:', e);
+                        await this.sendMessage(remoteJid, "Desculpe, houve um erro ao processar o relatório de presença. 😰");
                     }
                     return;
                 }
@@ -821,22 +879,31 @@ export class WhatsAppService {
      * Fallback: usa @s.whatsapp.net se a consulta falhar.
      */
     async resolveJid(phone: string): Promise<string> {
-        if (phone.includes('@')) return phone; // já é um JID
+        if (phone.includes('@')) return phone; // já é um JID (@s.whatsapp.net ou @g.us)
+        
         const clean = phone.replace(/\D/g, '');
-        // Adiciona DDI 55 p/ números brasileiros se necessário
+        // Adiciona DDI 55 p/ números brasileiros se necessário (10 ou 11 dígitos)
         const normalized = (!clean.startsWith('55') && (clean.length === 10 || clean.length === 11))
             ? '55' + clean : clean;
+
+        // Se o número tiver o formato padrão (DDI + DDD + 8 ou 9 dígitos), já podemos construir o JID.
+        // Isso evita o onWhatsApp (rede/CPU) que trava o sistema em broadcasts.
+        if (normalized.length >= 10 && normalized.length <= 13) {
+            return `${normalized}@s.whatsapp.net`;
+        }
+
         try {
-            if (this.sock) {
+            if (this.sock && normalized.length > 5) { // Evita consulta de números muito curtos
+                // Consulta lenta/pesada: use apenas como último recurso ou se necessário
                 const [result] = await this.sock.onWhatsApp(normalized);
                 if (result?.exists && result.jid) {
-                    console.log(`🔍 JID resolvido: ${normalized} → ${result.jid}`);
                     return result.jid;
                 }
             }
         } catch (e) {
-            console.warn(`⚠️ Falha ao resolver JID para ${normalized}, usando fallback.`);
+            console.warn(`⚠️ Erro ao resolver JID para ${normalized}, usando @s.whatsapp.net`);
         }
+        
         return `${normalized}@s.whatsapp.net`;
     }
 

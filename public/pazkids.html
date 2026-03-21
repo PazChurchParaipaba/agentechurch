@@ -42,7 +42,7 @@ body{font-family:'Outfit',sans-serif;background:#f1f5f9}
 @media print{header,.no-print{display:none!important}body{background:white}}
 @keyframes scanDown{0%{top:0}50%{top:calc(100% - 2px)}100%{top:0}}
 @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
-#scanner-modal video{transform:scaleX(-1) scaleX(-1)}
+#scanner-modal video{transform:scaleX(-1)}
 .scanner-result-animate{animation:slideUp .35s cubic-bezier(.16,1,.3,1)}
 </style>
 </head>
@@ -164,13 +164,13 @@ body{font-family:'Outfit',sans-serif;background:#f1f5f9}
 
     <!-- Lista -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="p-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div class="p-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
         <div>
           <h2 class="text-base font-bold text-gray-800">&#128118; Criancas no Culto</h2>
           <p id="kids-count" class="text-xs text-gray-400 mt-0.5">Carregando...</p>
         </div>
-        <div class="flex gap-2 w-full sm:w-auto">
-          <input type="text" id="search-input" placeholder="&#128269; Buscar..." oninput="searchChildren()" class="flex-1 sm:w-48 px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        <div class="flex gap-2 w-full lg:w-auto flex-wrap">
+          <input type="text" id="search-input" placeholder="&#128269; Buscar..." oninput="searchChildren()" class="flex-1 min-w-[140px] px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <select id="filter-status" onchange="searchChildren()" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none bg-white">
             <option value="all">Todos</option>
             <option value="green">&#9989; OK</option>
@@ -198,6 +198,9 @@ body{font-family:'Outfit',sans-serif;background:#f1f5f9}
           <input id="parent-number" type="number" placeholder="No. do cartao" min="1" class="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-center text-2xl font-black focus:outline-none focus:ring-2 focus:ring-indigo-400" onkeydown="if(event.key==='Enter') loadParentStatus()">
           <button onclick="loadParentStatus()" id="checkBtn" class="px-5 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl text-sm hover:shadow-lg transition">Ver &rarr;</button>
         </div>
+        <button onclick="openScanner()" class="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-500 font-bold text-xs hover:bg-indigo-50 transition flex items-center justify-center gap-2 mb-2">
+          &#128247; Escanear QR Code do Cartao
+        </button>
         <p class="text-xs text-gray-400">&#128161; O numero foi gerado no check-in e esta no QR Code do cartao.</p>
       </div>
       <div id="parent-status-display" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-7 text-center fade-in">

@@ -55,9 +55,11 @@ export function initScheduler() {
                     const msg = aiMsg && !aiMsg.includes("Desculpe") ? aiMsg : `Olá *${member.name}*! Feliz aniversário! 🎉 Que Deus te abençoe ricamente hoje e sempre. Amamos sua vida! ❤️`;
 
                     await waService.sendMessage(jid, msg);
+                    await new Promise(r => setTimeout(r, 2000)); // Delay para evitar bloqueios/CPU 100%
                 } catch (e) {
                     const fallback = `Olá *${member.name}*, a paz! 🕊️\n\nDesejamos um Feliz Aniversário! 🎉🎂 Que o Senhor te abençoe ricamente hoje!`;
                     await waService.sendMessage(jid, fallback);
+                    await new Promise(r => setTimeout(r, 2000));
                 }
             }
         }
@@ -70,8 +72,8 @@ export function initScheduler() {
                     const aiGroupMsg = await getAIResponse(prompt, CHURCH_GROUP_ID);
                     const groupMsg = aiGroupMsg && !aiGroupMsg.includes("Desculpe") ? aiGroupMsg : `🎉 *HOJE É DIA DE FESTA!* 🎉\n\nVamos celebrar a maravilhosa vida do(a) nosso(a) amado(a) *${member.name}*! 🎂🎈 Deixem seus parabéns aqui! 👏👏🎈`;
 
-                    // Montar url da imagem (usando prompt em inglês customizado)
-                    const promptImg = `A beautiful 3D birthday celebration card, Christian theme, bright and joyful, luxurious balloons and cake, elegant typography with the text "Feliz Aniversário ${member.name}", high quality, 8k`;
+                    // Montar url da imagem (usando prompt em inglês para o gerador, mas especificando texto em Português)
+                    const promptImg = `A stunning professional birthday celebration card for a church member named "${member.name}". The card must have the text in big beautiful letters: "FELIZ ANIVERSÁRIO!". Style: Christian theme, elegant, joyful, 3D balloons, golden bokeh, high resolution, photorealistic, 8k. IMPORTANT: ALL TEXT MUST BE IN BRAZILIAN PORTUGUESE. NO GERMAN TEXT.`;
 
                     // Enviar a imagem com a legenda (via método do whatsapp.ts)
                     await waService.sendGeneratedImageMessage(CHURCH_GROUP_ID, promptImg, groupMsg);
@@ -237,4 +239,41 @@ export function initScheduler() {
     } else {
         console.log('ℹ️ SELF_URL não configurado — keep-alive desativado');
     }
+
+    // Tarefa 8: Relatório Automático de Público (WiFi + Check-in) - Domingo às 20:00
+    cron.schedule('0 20 * * 0', async () => {
+        console.log('📊 Gerando relatório automático de presença do domingo...');
+        if (!LEADER_PHONE) return;
+
+        try {
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+
+            // 1. Wifi Pulse Data (Pico)
+            const { data: wifiData } = await supabase.from('wifi_attendance').select('connection_count').eq('service_date', dateStr);
+            const peakWifi = wifiData && wifiData.length > 0 ? Math.max(...wifiData.map(d => d.connection_count || 0)) : 0;
+
+            // 2. Check-ins Manuais
+            const { count: checkinCount } = await supabase.from('checkin_log').select('*', { count: 'exact', head: true })
+                .filter('checked_in_at', 'gte', `${dateStr}T00:00:00Z`)
+                .filter('checked_in_at', 'lte', `${dateStr}T23:59:59Z`);
+
+            // 3. Paz Kids
+            const { count: kidsCount } = await supabase.from('children').select('*', { count: 'exact', head: true });
+
+            const report = `📊 *RELATÓRIO SEMANAL DE PÚBLICO* 📊\n` +
+                `📅 *Data:* ${today.toLocaleDateString('pt-BR')}\n` +
+                `⏰ *Culto:* 17h30\n\n` +
+                `🌐 *Pico de Dispositivos WiFi:* ${peakWifi}\n` +
+                `👤 *Check-ins Oficiais:* ${checkinCount || 0}\n` +
+                `🧒 *Paz Kids:* ${kidsCount || 0}\n\n` +
+                `📈 *Estimativa Total de Almas:* ~${Math.max(peakWifi, (checkinCount || 0) + (kidsCount || 0))} pessoas.\n\n` +
+                `_Este relatório foi gerado automaticamente pelo Agente Igreja._ 🕊️`;
+
+            await waService.sendMessage(LEADER_PHONE, report);
+            console.log('✅ Relatório automático de presença enviado para o líder.');
+        } catch (e) {
+            console.error('Erro no relatório automático:', e);
+        }
+    }, { timezone: "America/Sao_Paulo" });
 }
