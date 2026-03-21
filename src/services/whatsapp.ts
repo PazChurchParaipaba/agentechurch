@@ -101,9 +101,10 @@ export class WhatsAppService {
         if (this.connecting || this.isConnected) return;
         this.connecting = true;
         try {
+            console.log('📡 Iniciando processo de conex\u00e3o com WhatsApp...');
             const { version } = await fetchLatestBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState(this.authStateStr);
-            console.log('🔗 Estabelecendo conexão com WhatsApp (Versão:', version, ')');
+            console.log('🔗 Estabelecendo socket (Vers\u00e3o:', version, ')');
 
             if (this.sock) {
                 try { this.sock.end(undefined); } catch (e) { }

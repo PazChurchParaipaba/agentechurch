@@ -582,23 +582,8 @@ const shutdown = () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-// Rota para ver o QR Code no navegador (caso o log falhe)
+// Rota principal para ver o QR Code no navegador (usada pelo Admin)
 app.get('/qr', (req, res) => {
-    if (waService.qrCodeString) {
-        // Gera um HTML simples com o QR Code usando Google Chart API (jeito fácil de renderizar)
-        const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(waService.qrCodeString)}`;
-        res.send(`
-            <html>
-                <body style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:sans-serif;">
-                    <h1>Escaneie para Conectar</h1>
-                    <img src="${url}" alt="QR Code" />
-                    <p>Status: Aguardando Escaneamento...</p>
-                    <script>setTimeout(() => location.reload(), 5000)</script>
-                </body>
-            </html>
-        `);
-    } else if (waService.isConnected) {
-        res.send('<h1>✅ Já conectado ao WhatsApp!</h1><a href="/admin">Ir para Admin</a>');
     } else {
         res.send(`
             <html>
