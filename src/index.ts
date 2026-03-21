@@ -145,23 +145,149 @@ app.get('/api/whatsapp-status', (req: Request, res: Response) => {
         lastInteraction: new Date(waService.lastMessageAt).toLocaleString()
     });
 });
-
-app.get('/api/qr', (req: Request, res: Response) => {
-    if (waService.isConnected) return res.send("<h3>Bot j\u00e1 est\u00e1 conectado! \u2705</h3>");
-    if (!waService.qrCodeDataUrl) return res.send("<h3>Gerando QR Code... Recarregue em alguns segundos. \u231b</h3>");
-    
+// Rota principal para ver o QR Code no navegador (usada pelo Admin)
+app.get('/qr', (req, res) => {
     res.send(`
-        <body style="background: #111; color: #fff; text-align: center; font-family: sans-serif; padding-top: 50px;">
-            <h1>Escaneie p/ o Agente Igreja</h1>
-            <p>O QR Code abaixo expira em breve. Recarregue a p\u00e1gina se n\u00e3o funcionar.</p>
-            <div style="background: #fff; display: inline-block; padding: 20px; border-radius: 20px;">
-                <img src="${waService.qrCodeDataUrl}" style="width: 300px; height: 300px; image-rendering: pixelated;" />
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Conectar WhatsApp - Agente Igreja</title>
+            <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+            <style>
+                body {
+                    background: #0f172a;
+                    color: #fff;
+                    font-family: 'Outfit', sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 10vh;
+                    margin: 0;
+                    overflow: hidden;
+                }
+                .container {
+                    background: rgba(255, 255, 255, 0.03);
+                    padding: 40px;
+                    border-radius: 40px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+                    text-align: center;
+                    transition: all 0.5s ease;
+                }
+                .qr-box {
+                    background: #fff;
+                    padding: 20px;
+                    border-radius: 24px;
+                    display: inline-block;
+                    margin: 20px 0;
+                    box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+                }
+                #qrImg {
+                    width: 280px;
+                    height: 280px;
+                    display: block;
+                    image-rendering: pixelated;
+                }
+                .status-pulse {
+                    color: #6366f1;
+                    font-weight: bold;
+                    animation: pulse 2s infinite;
+                    margin-top: 10px;
+                }
+                .hidden { display: none; }
+                @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+                button {
+                    background: #6366f1;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    margin-top: 20px;
+                    transition: 0.3s;
+                }
+                button:hover { background: #4f46e5; transform: scale(1.05); }
+            </style>
+        </head>
+        <body>
+            <div id="content" class="container">
+                <div id="loginSection">
+                    <h1 style="margin: 0; font-size: 24px;">Conectar Agente Igreja</h1>
+                    <p style="color: #94a3b8; font-size: 14px; margin: 10px 0 20px;">Abra o WhatsApp > Aparelhos Conectados > Conectar um aparelho</p>
+                    
+                    <div id="qrPlaceholder" class="qr-box">
+                        <div style="width: 280px; height: 280px; color: #000; display: flex; align-items: center; justify-content: center;">
+                            Carregando...
+                        </div>
+                    </div>
+                    <div id="qrContainer" class="qr-box hidden">
+                        <img id="qrImg" src="" alt="QR Code" />
+                    </div>
+                    
+                    <div class="status-pulse">Aguardando novo c\u00f3digo...</div>
+                </div>
+
+                <div id="connectedSection" class="hidden">
+                    <h1 style="color: #4ade80; margin: 0;">\u2705 Bot Conectado!</h1>
+                    <p style="color: #94a3b8; margin: 10px 0;">O sistema j\u00e1 est\u00e1 online.</p>
+                    <button onclick="location.href='/admin'">Ir para o Painel</button>
+                </div>
             </div>
-            <p style="color: #666; margin-top: 20px;">Dica: Se n\u00e3o carregar, verifique os logs do Koyeb.</p>
-            <script>setTimeout(() => location.reload(), 30000);</script>
+
+            <script>
+                async function checkStatus() {
+                    try {
+                        const res = await fetch('/api/dashboard-stats');
+                        const data = await res.json();
+                        
+                        if (data.botStatus === 'online') {
+                            document.getElementById('loginSection').classList.add('hidden');
+                            document.getElementById('connectedSection').classList.remove('hidden');
+                            return;
+                        }
+
+                        // Se n\u00e3o est\u00e1 online, busca o QR
+                        const qrRes = await fetch('/api/whatsapp-status');
+                        const qrData = await qrRes.json();
+                        
+                        // Pegar a string do QR em Base64 (estamos gerando no waService.qrCodeDataUrl)
+                        // Como n\u00e3o temos um endpoint direto p/ a imagem, vamos buscar do status se eu o expus
+                        // Vou precisar atualizar o endpoint /api/whatsapp-status para mandar o dataUrl
+                        if (qrData.qr) {
+                            document.getElementById('qrImg').src = qrData.qr;
+                            document.getElementById('qrPlaceholder').classList.add('hidden');
+                            document.getElementById('qrContainer').classList.remove('hidden');
+                            document.querySelector('.status-pulse').innerText = 'Escaneie agora!';
+                        }
+                    } catch (e) {
+                        console.error('Erro ao buscar status:', e);
+                    }
+                }
+
+                setInterval(checkStatus, 3000); // Polling a cada 3s
+                checkStatus();
+            </script>
         </body>
+        </html>
     `);
 });
+
+// Alias e API de status melhorada
+app.get('/api/whatsapp-status', (req: Request, res: Response) => {
+    res.json({
+        connected: waService.isConnected,
+        hasQr: !!waService.qrCodeDataUrl,
+        qr: waService.qrCodeDataUrl,
+        lastInteraction: new Date(waService.lastMessageAt).toLocaleString()
+    });
+});
+
+app.get('/api/qr', (req, res) => res.redirect('/qr'));
 
 // Toggle Maintenance Mode
 app.post('/api/maintenance', authMiddleware, (req: Request, res: Response) => {
@@ -584,16 +710,139 @@ process.on('SIGINT', shutdown);
 
 // Rota principal para ver o QR Code no navegador (usada pelo Admin)
 app.get('/qr', (req, res) => {
-    } else {
-        res.send(`
-            <html>
-                <body style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:sans-serif;">
-                    <h1>⏳ Gerando QR Code...</h1>
-                    <p>Aguarde um momento enquanto conectamos aos servidores do WhatsApp.</p>
-                    <p>Se demorar muito (> 1 min), verifique o terminal.</p>
-                    <script>setTimeout(() => location.reload(), 3000)</script>
-                </body>
-            </html>
-        `);
-    }
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Conectar WhatsApp - Agente Igreja</title>
+            <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+            <style>
+                body {
+                    background: #0f172a;
+                    color: #fff;
+                    font-family: 'Outfit', sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    overflow: hidden;
+                }
+                .container {
+                    background: rgba(255, 255, 255, 0.03);
+                    padding: 40px;
+                    border-radius: 40px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+                    text-align: center;
+                }
+                .qr-box {
+                    background: #fff;
+                    padding: 20px;
+                    border-radius: 24px;
+                    display: inline-block;
+                    margin: 20px 0;
+                    box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+                }
+                #qrImg {
+                    width: 280px;
+                    height: 280px;
+                    display: block;
+                    image-rendering: pixelated;
+                }
+                .status-pulse {
+                    color: #6366f1;
+                    font-weight: bold;
+                    animation: pulse 2s infinite;
+                    margin-top: 10px;
+                }
+                .hidden { display: none; }
+                @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+                button {
+                    background: #6366f1;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    margin-top: 20px;
+                    transition: 0.3s;
+                }
+                button:hover { background: #4f46e5; transform: scale(1.05); }
+            </style>
+        </head>
+        <body>
+            <div id="content" class="container">
+                <div id="loginSection">
+                    <h1 style="margin: 0; font-size: 24px;">Conectar Agente Igreja</h1>
+                    <p style="color: #94a3b8; font-size: 14px; margin: 10px 0 20px;">Abra o WhatsApp > Aparelhos Conectados > Conectar um aparelho</p>
+                    
+                    <div id="qrPlaceholder" class="qr-box">
+                        <div style="width: 280px; height: 280px; color: #000; display: flex; align-items: center; justify-content: center;">
+                            Carregando...
+                        </div>
+                    </div>
+                    <div id="qrContainer" class="qr-box hidden">
+                        <img id="qrImg" src="" alt="QR Code" />
+                    </div>
+                    
+                    <div class="status-pulse">Aguardando novo c\u00f3digo...</div>
+                </div>
+
+                <div id="connectedSection" class="hidden">
+                    <h1 style="color: #4ade80; margin: 0;">\u2705 Bot Conectado!</h1>
+                    <p style="color: #94a3b8; margin: 10px 0;">O sistema j\u00e1 est\u00e1 online.</p>
+                    <button onclick="location.href='/admin'">Ir para o Painel</button>
+                </div>
+            </div>
+
+            <script>
+                async function checkStatus() {
+                    try {
+                        const res = await fetch('/api/dashboard-stats');
+                        const data = await res.json();
+                        
+                        if (data.botStatus === 'online') {
+                            document.getElementById('loginSection').classList.add('hidden');
+                            document.getElementById('connectedSection').classList.remove('hidden');
+                            return;
+                        }
+
+                        const qrRes = await fetch('/api/whatsapp-status');
+                        const qrData = await qrRes.json();
+                        
+                        if (qrData.qr) {
+                            document.getElementById('qrImg').src = qrData.qr;
+                            document.getElementById('qrPlaceholder').classList.add('hidden');
+                            document.getElementById('qrContainer').classList.remove('hidden');
+                            document.querySelector('.status-pulse').innerText = 'Escaneie agora!';
+                        }
+                    } catch (e) {
+                        console.error('Erro ao buscar status:', e);
+                    }
+                }
+
+                setInterval(checkStatus, 3000);
+                checkStatus();
+            </script>
+        </body>
+        </html>
+    `);
 });
+
+// Alias e API de status melhorada
+app.get('/api/whatsapp-status', (req: Request, res: Response) => {
+    res.json({
+        connected: waService.isConnected,
+        hasQr: !!waService.qrCodeDataUrl,
+        qr: waService.qrCodeDataUrl,
+        lastInteraction: new Date(waService.lastMessageAt).toLocaleString()
+    });
+});
+
+app.get('/api/qr', (req, res) => res.redirect('/qr'));
