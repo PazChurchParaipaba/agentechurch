@@ -791,36 +791,62 @@ app.get('/qr', (req, res) => {
                         <img id="qrImg" src="" alt="QR Code" />
                     </div>
                     
-                    <div class="status-pulse">Aguardando novo c\u00f3digo...</div>
+                    <div class="status-pulse" id="statusText">Aguardando novo c\u00f3digo...</div>
+                    <div id="connectingStatus" class="hidden" style="color: #fbbf24; font-size: 14px; margin-top: 10px;">\u231b Sincronizando com WhatsApp...</div>
                 </div>
 
                 <div id="connectedSection" class="hidden">
                     <h1 style="color: #4ade80; margin: 0;">\u2705 Bot Conectado!</h1>
                     <p style="color: #94a3b8; margin: 10px 0;">O sistema j\u00e1 est\u00e1 online.</p>
-                    <button onclick="location.href='/admin'">Ir para o Painel</button>
+                </div>
+
+                <div style="margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); pt-20">
+                    <button id="resetBtn" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 12px; padding: 8px 16px;">
+                        \ud83d\uddd1\ufe0f Limpar Sess\u00e3o e Reiniciar
+                    </button>
+                    <p style="font-size: 10px; color: #475569; margin-top: 10px;">Use apenas se o QR Code demorar mais de 1 minuto para aparecer.</p>
                 </div>
             </div>
 
             <script>
+                document.getElementById('resetBtn').onclick = async () => {
+                    if (!confirm('Deseja limpar os arquivos de sess\u00e3o e reiniciar o bot?')) return;
+                    const btn = document.getElementById('resetBtn');
+                    btn.innerText = '\u231b Limpando...';
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch('/api/clear-session', { method: 'POST' });
+                        alert('Sess\u00e3o limpa! A p\u00e1gina ir\u00e1 recarregar.');
+                        location.reload();
+                    } catch (e) {
+                        alert('Erro ao limpar sess\u00e3o.');
+                        btn.innerText = '\ud83d\uddd1\ufe0f Limpar Sess\u00e3o e Reiniciar';
+                        btn.disabled = false;
+                    }
+                };
+
                 async function checkStatus() {
                     try {
-                        const res = await fetch('/api/dashboard-stats');
-                        const data = await res.json();
+                        const qrRes = await fetch('/api/whatsapp-status');
+                        const qrData = await qrRes.json();
                         
-                        if (data.botStatus === 'online') {
+                        if (qrData.connected) {
                             document.getElementById('loginSection').classList.add('hidden');
                             document.getElementById('connectedSection').classList.remove('hidden');
                             return;
                         }
 
-                        const qrRes = await fetch('/api/whatsapp-status');
-                        const qrData = await qrRes.json();
-                        
+                        if (qrData.connecting) {
+                            document.getElementById('connectingStatus').classList.remove('hidden');
+                        } else {
+                            document.getElementById('connectingStatus').classList.add('hidden');
+                        }
+
                         if (qrData.qr) {
                             document.getElementById('qrImg').src = qrData.qr;
                             document.getElementById('qrPlaceholder').classList.add('hidden');
                             document.getElementById('qrContainer').classList.remove('hidden');
-                            document.querySelector('.status-pulse').innerText = 'Escaneie agora!';
+                            document.getElementById('statusText').innerText = 'Escaneie agora!';
                         }
                     } catch (e) {
                         console.error('Erro ao buscar status:', e);
@@ -839,6 +865,7 @@ app.get('/qr', (req, res) => {
 app.get('/api/whatsapp-status', (req: Request, res: Response) => {
     res.json({
         connected: waService.isConnected,
+        connecting: waService.connecting,
         hasQr: !!waService.qrCodeDataUrl,
         qr: waService.qrCodeDataUrl,
         lastInteraction: new Date(waService.lastMessageAt).toLocaleString()

@@ -33,6 +33,8 @@ export class WhatsAppService {
     public qrCodeString: string | null = null;
     public qrCodeDataUrl: string | null = null;
     public isConnected: boolean = false;
+    public connecting: boolean = false;
+    private connectionWatchdog: NodeJS.Timeout | null = null;
     private LEADER_PHONE = process.env.LEADER_PHONE;
 
     private userStates: { [key: string]: UserState } = {};
@@ -95,11 +97,20 @@ export class WhatsAppService {
         }, backoffMs);
     }
 
-    private connecting: boolean = false;
 
     async connectToWhatsApp() {
         if (this.connecting || this.isConnected) return;
         this.connecting = true;
+        
+        // Watchdog de conex\u00e3o: Se n\u00e3o conectar ou gerar QR em 90s, reseta o flag
+        if (this.connectionWatchdog) clearTimeout(this.connectionWatchdog);
+        this.connectionWatchdog = setTimeout(() => {
+            if (this.connecting && !this.isConnected && !this.qrCodeDataUrl) {
+                console.warn('⚠️ Watchdog: A conex\u00e3o est\u00e1 demorando demais. Resetando flag de connecting...');
+                this.connecting = false;
+            }
+        }, 90000);
+
         try {
             console.log('📡 Iniciando processo de conex\u00e3o com WhatsApp...');
             const { version } = await fetchLatestBaileysVersion();
@@ -152,6 +163,10 @@ export class WhatsAppService {
                 if (qr) {
                     this.qrCodeString = qr;
                     this.qrCodeDataUrl = await QRCode.toDataURL(qr);
+                    if (this.connectionWatchdog) {
+                        clearTimeout(this.connectionWatchdog);
+                        this.connectionWatchdog = null;
+                    }
                     console.log('📢 Novo QR gerado.');
                 }
 
