@@ -152,14 +152,17 @@ export class WhatsAppService {
             }
 
             this.sock = makeWASocket({
-                logger: pino({ level: 'info' }), // Ativado info para facilitar debug do usu\u00e1rio
+                logger: pino({ level: 'silent' }), // Alterado para silent para não travar o Koyeb com excesso de logs
                 auth: state,
                 version,
-                browser: Browsers.ubuntu('Chrome'), // Melhora a compatibilidade e evita quedas
+                browser: ['PazChurch', 'Chrome', '1.0.0'], // Alterado para evitar bloqueios no pareamento
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
                 keepAliveIntervalMs: 30000,
                 defaultQueryTimeoutMs: 60000,
+                getMessage: async (key) => {
+                    return { conversation: 'Mensagem de fallback' };
+                }
             });
 
             this.sock.ev.on('connection.update', async (update: any) => {
@@ -857,7 +860,7 @@ export class WhatsAppService {
     async sendMessage(to: string, text: string) {
         if (!this.sock || !this.isConnected) {
             console.error(`❌ Falha ao enviar mensagem para ${to}: Socket desconectado.`);
-            return;
+            throw new Error('Whatsapp não está conectado.');
         }
         try {
             let jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
@@ -933,7 +936,9 @@ export class WhatsAppService {
     }
 
     async sendImage(to: string, content: string | Buffer, caption?: string) {
-        if (!this.sock) return;
+        if (!this.sock || !this.isConnected) {
+            throw new Error('Whatsapp não está conectado.');
+        }
         const jid = await this.resolveJid(to);
         const imageContent = typeof content === 'string' ? { url: content } : content;
         await this.sock.sendMessage(jid, { image: imageContent, caption });
