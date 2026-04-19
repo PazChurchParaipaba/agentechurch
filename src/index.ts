@@ -357,8 +357,13 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
 
     try {
         // 1. Buscar apenas as colunas necessárias para o disparo
-        const { data: members, error } = await supabase.from('members_paraipaba').select('phone').eq('is_active', true);
-        if (error || !members) throw new Error('Erro ao buscar membros');
+        // Removido eq('is_active', true) pois a coluna pode não existir em todos os bancos
+        const { data: members, error } = await supabase.from('members_paraipaba').select('phone');
+        if (error) {
+            console.error('Supabase error:', error);
+            throw new Error(`Erro ao buscar membros: ${error.message || JSON.stringify(error)}`);
+        }
+        if (!members) throw new Error('Nenhum membro retornado do banco');
 
         // 2. Buscar Grupos onde o bot está
         let groups: any[] = [];
@@ -426,9 +431,9 @@ app.post('/api/broadcast', authMiddleware, upload.single('image'), async (req: R
             res.json({ success: true, message: `Disparo iniciado para ${targets.length} alvos (incluindo ${groups.length} grupos).` });
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Erro no broadcast:', error);
-        res.status(500).json({ error: 'Erro interno ao disparar mensagens.' });
+        res.status(500).json({ error: error.message || 'Erro interno ao disparar mensagens.' });
     }
 });
 
