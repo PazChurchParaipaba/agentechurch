@@ -854,7 +854,18 @@ export class WhatsAppService {
                     if (this.sock) await this.sock.sendPresenceUpdate('available', remoteJid);
                 } catch (e) { console.error("Erro IA:", e); }
             });
-        } catch (e) { console.error("Erro total:", e); }
+    }
+    
+    // Helper para evitar hangs (travamentos eternos da conexão wa socket)
+    private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage = 'Tempo limite excedido da conexão (Timeout)'): Promise<T> {
+        let timeoutId: NodeJS.Timeout;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+        });
+        return Promise.race([
+            promise.finally(() => clearTimeout(timeoutId)),
+            timeoutPromise
+        ]);
     }
 
     async sendMessage(to: string, text: string) {
@@ -864,14 +875,16 @@ export class WhatsAppService {
         }
         try {
             let jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
-            await this.sock.sendMessage(jid, { text });
+            // Timeout de 15 segundos em vez de travar o disparo para sempre
+            await this.withTimeout(this.sock.sendMessage(jid, { text }), 15000);
             this.lastMessageAt = Date.now();
         } catch (e: any) {
             console.error(`❌ Erro ao enviar mensagem para ${to}:`, e.message);
-            if (e.message.includes('Closed')) {
+            if (e.message.includes('Closed') || e.message.includes('Timeout')) {
                 this.isConnected = false;
                 this.scheduleReconnect(5000);
             }
+            throw e; // Lança o erro para o disparo não computar como sucesso
         }
     }
 
@@ -922,14 +935,14 @@ export class WhatsAppService {
 
         try {
             if (this.sock && normalized.length > 5) { // Evita consulta de números muito curtos
-                // Consulta lenta/pesada: use apenas como último recurso ou se necessário
-                const [result] = await this.sock.onWhatsApp(normalized);
+                // Consulta super lenta/pesada: limitamos a 5 segundos para não travar!
+                const [result] = await this.withTimeout(this.sock.onWhatsApp(normalized), 5000, 'onWhatsApp timeout');
                 if (result?.exists && result.jid) {
                     return result.jid;
                 }
             }
-        } catch (e) {
-            console.warn(`⚠️ Erro ao resolver JID para ${normalized}, usando @s.whatsapp.net`);
+        } catch (e: any) {
+            console.warn(`⚠️ Erro ao resolver JID para ${normalized}: ${e.message}. Usando @s.whatsapp.net`);
         }
         
         return `${normalized}@s.whatsapp.net`;
@@ -941,7 +954,17 @@ export class WhatsAppService {
         }
         const jid = await this.resolveJid(to);
         const imageContent = typeof content === 'string' ? { url: content } : content;
-        await this.sock.sendMessage(jid, { image: imageContent, caption });
+        try {
+            await this.withTimeout(this.sock.sendMessage(jid, { image: imageContent, caption }), 25000); // 25s timeout pra imagem
+            this.lastMessageAt = Date.now();
+        } catch (e: any) {
+            console.error(`❌ Erro ao enviar imagem para ${to}:`, e.message);
+            if (e.message.includes('Closed') || e.message.includes('Timeout')) {
+                this.isConnected = false;
+                this.scheduleReconnect(5000);
+            }
+            throw e;
+        }
     }
 }
 
