@@ -10,6 +10,14 @@ import { textToSpeech } from './services/tts';
 
 import multer from 'multer';
 
+// Error Handling Global para evitar crashes (evita erro 503 no Koyeb)
+process.on('uncaughtException', (err) => {
+    console.error('💥 Uncaught Exception GLOBAL:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Estado de Manutenção (Melhoria 15)
 export let maintenanceMode = false;
 
