@@ -874,7 +874,7 @@ export class WhatsAppService {
             throw new Error('Whatsapp não está conectado.');
         }
         try {
-            let jid = to.includes('@') ? to : (to.length >= 14 ? `${to}@lid` : `${to}@s.whatsapp.net`);
+            const jid = await this.resolveJid(to);
             // Timeout de 15 segundos em vez de travar o disparo para sempre
             await this.withTimeout(this.sock.sendMessage(jid, { text }), 15000);
             this.lastMessageAt = Date.now();
@@ -942,10 +942,10 @@ export class WhatsAppService {
                 }
             }
         } catch (e: any) {
-            console.warn(`⚠️ Erro ao resolver JID para ${normalized}: ${e.message}. Usando @s.whatsapp.net`);
+            console.warn(`⚠️ Erro ao resolver JID para ${normalized}: ${e.message}. Usando fallback de comprimento.`);
         }
         
-        return `${normalized}@s.whatsapp.net`;
+        return normalized.length >= 14 ? `${normalized}@lid` : `${normalized}@s.whatsapp.net`;
     }
 
     async sendImage(to: string, content: string | Buffer, caption?: string) {
